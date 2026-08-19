@@ -1,0 +1,509 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  DndContext, 
+  closestCorners, 
+  KeyboardSensor, 
+  PointerSensor, 
+  useSensor, 
+  useSensors,
+  DragOverlay,
+  useDroppable
+} from '@dnd-kit/core';
+import { 
+  SortableContext, 
+  arrayMove, 
+  sortableKeyboardCoordinates, 
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { MoreHorizontal, Calendar, BookOpen, X, MessageSquare, Plus, Edit2, Trash2, Check } from 'lucide-react';
+import axios from 'axios';
+
+const API_URL = 'http://127.0.0.1:8000/api/leads';
+
+const COLUMNS = {
+  hot: { title: 'Hot Leads', color: '#ff4500' },
+  warm: { title: 'Warm Leads', color: '#facc15' },
+  cold: { title: 'Cold Leads', color: '#3b82f6' },
+  approved: { title: 'Approved', color: '#10b981' },
+  dead: { title: 'Dead Leads', color: '#64748b' }
+};
+
+function SortableItem({ item, onClick }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      {...attributes} 
+      {...listeners}
+      onClick={() => {
+        // Only trigger click if not actively dragging
+        if (!isDragging) {
+          onClick(item);
+        }
+      }}
+      className={`kanban-card ${isDragging ? 'is-dragging' : ''}`}
+    >
+      <div className="lead-header">
+        <span className="lead-name">{item.name}</span>
+        <span className="lead-meta"><MoreHorizontal size={14}/></span>
+      </div>
+      <div className="lead-program">
+        <BookOpen size={14} /> {item.program}
+      </div>
+      <div className="lead-footer">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <img src={`https://i.pravatar.cc/150?u=${item.avatar}`} alt="Avatar" className="lead-avatar" />
+        </div>
+        <div className="lead-date" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <Calendar size={12} /> {item.date}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KanbanColumn({ columnId, items, onCardClick }) {
+  const { setNodeRef } = useDroppable({
+    id: columnId,
+  });
+
+  return (
+    <div className="kanban-column" ref={setNodeRef}>
+      <div className="kanban-column-header">
+        <div className="kanban-column-title">
+          <div className="kanban-dot" style={{ backgroundColor: COLUMNS[columnId].color }}></div>
+          {COLUMNS[columnId].title}
+        </div>
+        <span className="kanban-count">{items.length}</span>
+      </div>
+      
+      <div className="kanban-column-content">
+        <SortableContext 
+          id={columnId}
+          items={items.map(i => i.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {items.map(item => (
+            <SortableItem key={item.id} item={item} onClick={onCardClick} />
+          ))}
+        </SortableContext>
+      </div>
+    </div>
+  );
+}
+
+export default function FollowUp() {
+  const [items, setItems] = useState([]);
+  
+  useEffect(() => {
+    fetchLeads();
+  }, []);
+
+  const fetchLeads = async () => {
+    try {
+      const response = await axios.get(API_URL);
+      const fetchedItems = response.data.map(lead => ({
+        ...lead,
+        id: lead.id.toString(),
+        column: lead.type,
+        program: lead.location, // UI uses program
+        avatar: (lead.id % 7) + 1, // pseudo random avatar
+        date: new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        notes: typeof lead.notes === 'string' ? JSON.parse(lead.notes) : (lead.notes || [])
+      }));
+      setItems(fetchedItems);
+    } catch (error) {
+      console.error('Error fetching leads:', error);
+    }
+  };
+  const [activeId, setActiveId] = useState(null);
+  
+  // Modal State
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [newNote, setNewNote] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [editNoteText, setEditNoteText] = useState('');
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragStart = (event) => {
+    setActiveId(event.active.id);
+  };
+
+  const handleDragOver = (event) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id;
+    const overId = over.id;
+
+    if (activeId === overId) return;
+
+    const isActiveTask = active.data.current?.sortable.containerId;
+    const isOverTask = over.data.current?.sortable.containerId;
+
+    if (!isActiveTask) return;
+
+    setItems((items) => {
+      const activeIndex = items.findIndex(t => t.id === activeId);
+      const overIndex = items.findIndex(t => t.id === overId);
+
+      if (items[activeIndex].column !== over?.data?.current?.sortable?.containerId) {
+        // Find what column we are hovering over. 
+        // If overId is a column ID, move it there. Otherwise, get it from the item we are over.
+        let overColumn = Object.keys(COLUMNS).includes(overId) 
+          ? overId 
+          : items[overIndex]?.column;
+
+        if (!overColumn) overColumn = over.data.current?.sortable?.containerId;
+        
+        if (overColumn && items[activeIndex].column !== overColumn) {
+           const updatedItems = [...items];
+           updatedItems[activeIndex].column = overColumn;
+           return updatedItems;
+        }
+      }
+      return items;
+    });
+  };
+
+  const handleDragEnd = async (event) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id;
+    const overId = over.id;
+
+    if (activeId === overId) return;
+
+    let newColumn = null;
+    let itemDbId = null;
+
+    setItems((items) => {
+      const activeIndex = items.findIndex(t => t.id === activeId);
+      const overIndex = items.findIndex(t => t.id === overId);
+
+      if (activeIndex !== -1) {
+        newColumn = items[activeIndex].column;
+        itemDbId = items[activeIndex].id;
+      }
+
+      if (activeIndex !== -1 && overIndex !== -1 && items[activeIndex].column === items[overIndex].column) {
+         return arrayMove(items, activeIndex, overIndex);
+      }
+      return items;
+    });
+
+    if (itemDbId && newColumn) {
+      try {
+        await axios.put(`${API_URL}/${itemDbId}`, { type: newColumn });
+      } catch (err) {
+        console.error('Failed to update lead status:', err);
+      }
+    }
+  };
+
+  const activeItem = activeId ? items.find(i => i.id === activeId) : null;
+
+  const handleCardClick = (item) => {
+    setSelectedLead(item);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedLead(null);
+    setNewNote('');
+    setEditingNoteId(null);
+    setEditNoteText('');
+  };
+
+  const handleStatusChange = async (newStatus) => {
+    if (!selectedLead) return;
+    try {
+      await axios.put(`${API_URL}/${selectedLead.id}`, { type: newStatus });
+      setItems((prevItems) => prevItems.map(item => 
+        item.id === selectedLead.id ? { ...item, column: newStatus, type: newStatus } : item
+      ));
+      setSelectedLead((prev) => ({ ...prev, column: newStatus, type: newStatus }));
+    } catch (err) {
+      console.error('Failed to update lead status:', err);
+    }
+  };
+
+  const handleAddNote = async (e) => {
+    e.preventDefault();
+    if (!newNote.trim()) return;
+
+    const timestamp = new Date().toLocaleString('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+    });
+
+    const noteObj = {
+      id: Date.now().toString(),
+      text: newNote.trim(),
+      author: 'Admin',
+      time: timestamp
+    };
+
+    const updatedNotes = [...(selectedLead.notes || []), noteObj];
+
+    try {
+      await axios.put(`${API_URL}/${selectedLead.id}`, { notes: updatedNotes });
+      const updatedItems = items.map(item => {
+        if (item.id === selectedLead.id) {
+          setSelectedLead({ ...item, notes: updatedNotes });
+          return { ...item, notes: updatedNotes };
+        }
+        return item;
+      });
+      setItems(updatedItems);
+      setNewNote('');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    const updatedNotes = selectedLead.notes.filter(n => n.id !== noteId);
+    try {
+      await axios.put(`${API_URL}/${selectedLead.id}`, { notes: updatedNotes });
+      const updatedItems = items.map(item => {
+        if (item.id === selectedLead.id) {
+          setSelectedLead({ ...item, notes: updatedNotes });
+          return { ...item, notes: updatedNotes };
+        }
+        return item;
+      });
+      setItems(updatedItems);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const startEditingNote = (note) => {
+    setEditingNoteId(note.id);
+    setEditNoteText(note.text);
+  };
+
+  const handleSaveEdit = async (noteId) => {
+    if (!editNoteText.trim()) return;
+    const updatedNotes = selectedLead.notes.map(n => 
+      n.id === noteId ? { ...n, text: editNoteText.trim() } : n
+    );
+    try {
+      await axios.put(`${API_URL}/${selectedLead.id}`, { notes: updatedNotes });
+      const updatedItems = items.map(item => {
+        if (item.id === selectedLead.id) {
+          setSelectedLead({ ...item, notes: updatedNotes });
+          return { ...item, notes: updatedNotes };
+        }
+        return item;
+      });
+      setItems(updatedItems);
+      setEditingNoteId(null);
+      setEditNoteText('');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <div style={{ padding: '0 0' }}>
+      
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="kanban-board">
+          {Object.keys(COLUMNS).map(columnId => (
+            <KanbanColumn 
+              key={columnId} 
+              columnId={columnId} 
+              items={items.filter(item => item.column === columnId)} 
+              onCardClick={handleCardClick}
+            />
+          ))}
+        </div>
+
+        <DragOverlay>
+          {activeItem ? (
+             <div className="kanban-card" style={{ cursor: 'grabbing', opacity: 0.8, transform: 'scale(1.05)', boxShadow: 'var(--shadow-lg)' }}>
+              <div className="lead-header">
+                <span className="lead-name">{activeItem.name}</span>
+                <span className="lead-meta"><MoreHorizontal size={14}/></span>
+              </div>
+              <div className="lead-program">
+                <BookOpen size={14} /> {activeItem.program}
+              </div>
+              <div className="lead-footer">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <img src={`https://i.pravatar.cc/150?u=${activeItem.avatar}`} alt="Avatar" className="lead-avatar" />
+                </div>
+                <div className="lead-date" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Calendar size={12} /> {activeItem.date}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      {/* Lead Profile & Notes Modal */}
+      {selectedLead && (
+        <div className="modal-overlay fadeIn" onClick={handleCloseModal}>
+          <div className="modal-content slideUp" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            
+            {/* Modal Header */}
+            <div className="profile-header">
+              <div className="profile-cover"></div>
+              <button className="profile-close-btn" onClick={handleCloseModal}>
+                <X size={20} />
+              </button>
+              <div className="profile-avatar-wrapper">
+                <img src={`https://i.pravatar.cc/150?u=${selectedLead.avatar}`} alt="Avatar" className="profile-avatar-img" />
+              </div>
+            </div>
+
+            <div className="profile-body">
+              <div className="profile-title-row">
+                <div>
+                  <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 0.25rem 0' }}>{selectedLead.name}</h2>
+                  <p style={{ color: 'var(--text-muted)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <BookOpen size={16}/> {selectedLead.program}
+                  </p>
+                </div>
+                <select 
+                  value={selectedLead.column} 
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                  className="form-select"
+                  style={{ 
+                    width: 'auto', 
+                    backgroundColor: COLUMNS[selectedLead.column].color + '15', 
+                    color: COLUMNS[selectedLead.column].color,
+                    border: `1px solid ${COLUMNS[selectedLead.column].color}40`,
+                    fontWeight: 600
+                  }}
+                >
+                  {Object.entries(COLUMNS).map(([key, col]) => (
+                    <option key={key} value={key}>{col.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Student Data Grid */}
+              <div className="student-data-grid">
+                <div>
+                  <span className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Email Address</span>
+                  <p style={{ margin: 0, color: 'var(--text-main)', fontWeight: 500, fontSize: '0.9rem' }}>{selectedLead.email}</p>
+                </div>
+                <div>
+                  <span className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Phone Number</span>
+                  <p style={{ margin: 0, color: 'var(--text-main)', fontWeight: 500, fontSize: '0.9rem' }}>{selectedLead.phone}</p>
+                </div>
+                <div>
+                  <span className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Current Location</span>
+                  <p style={{ margin: 0, color: 'var(--text-main)', fontWeight: 500, fontSize: '0.9rem' }}>{selectedLead.location}</p>
+                </div>
+                <div>
+                  <span className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Application Date</span>
+                  <p style={{ margin: 0, color: 'var(--text-main)', fontWeight: 500, fontSize: '0.9rem' }}>{selectedLead.date}, 2026</p>
+                </div>
+              </div>
+
+              {/* Notes Section */}
+              <div className="modal-section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                <MessageSquare size={18} color="var(--primary-main)"/>
+                <h3 style={{ margin: 0, fontSize: '1.125rem' }}>Lead Notes</h3>
+              </div>
+
+              {/* Timeline */}
+              <div className="notes-container">
+                {selectedLead.notes && selectedLead.notes.length > 0 ? (
+                  selectedLead.notes.map((note) => (
+                    <div key={note.id} className="note-item">
+                      <div className="note-header">
+                        <div>
+                          <span className="note-author">{note.author}</span>
+                          <span className="note-time" style={{ marginLeft: '0.5rem' }}>{note.time}</span>
+                        </div>
+                        {editingNoteId !== note.id && (
+                          <div className="note-actions">
+                            <button className="note-action-btn" onClick={() => startEditingNote(note)}><Edit2 size={14} /></button>
+                            <button className="note-action-btn delete" onClick={() => handleDeleteNote(note.id)}><Trash2 size={14} /></button>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {editingNoteId === note.id ? (
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                          <input 
+                            type="text" 
+                            className="form-input" 
+                            value={editNoteText}
+                            onChange={(e) => setEditNoteText(e.target.value)}
+                            style={{ flex: 1, padding: '0.5rem' }}
+                          />
+                          <button className="primary-btn" onClick={() => handleSaveEdit(note.id)} style={{ padding: '0.5rem 1rem' }}>Save</button>
+                          <button className="secondary-btn" onClick={() => setEditingNoteId(null)} style={{ padding: '0.5rem 1rem' }}>Cancel</button>
+                        </div>
+                      ) : (
+                        <p className="note-text">{note.text}</p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>
+                    No notes recorded for this lead yet.
+                  </div>
+                )}
+              </div>
+
+              {/* Add Note Form */}
+              <form onSubmit={handleAddNote} style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Type a new note..."
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  style={{ flex: 1, backgroundColor: '#f8fafc' }}
+                />
+                <button type="submit" className="primary-btn" style={{ padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }} disabled={!newNote.trim()}>
+                  <Plus size={18}/> Add
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
