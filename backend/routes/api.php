@@ -14,8 +14,10 @@ Route::get('/user', function (Request $request) {
 
 Route::apiResource('leads', LeadController::class);
 Route::apiResource('students', StudentController::class);
+Route::delete('students/{student}/documents/{document}', [StudentController::class, 'deleteDocument']);
 Route::get('applications', [StudentController::class, 'applications']);
 Route::apiResource('courses', CourseController::class);
 Route::apiResource('universities', UniversityController::class);
 
 Route::get('dashboard/stats', [DashboardController::class, 'getStats']);
+Route::get('dashboard/enrollments', [DashboardController::class, 'getEnrollments']);

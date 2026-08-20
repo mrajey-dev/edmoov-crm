@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, Lock, Save, Eye, EyeOff } from 'lucide-react';
+import { Key, Lock, Save, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function PasswordReset() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -10,6 +10,7 @@ export default function PasswordReset() {
   const [showNew, setShowNew] = useState(false);
   
   const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
@@ -23,11 +24,15 @@ export default function PasswordReset() {
       return;
     }
     setError('');
-    setIsSaved(true);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setTimeout(() => setIsSaved(false), 3000);
+    setIsSaving(true);
+    setTimeout(() => {
+      setIsSaving(false);
+      setIsSaved(true);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setIsSaved(false), 3000);
+    }, 1000);
   };
 
   return (
@@ -104,8 +109,8 @@ export default function PasswordReset() {
           {error && <div style={{ color: '#ef4444', backgroundColor: '#fef2f2', padding: '0.75rem', borderRadius: '6px', fontSize: '0.9rem', border: '1px solid #fecaca' }}>{error}</div>}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
-            <button type="submit" className="primary-btn" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Save size={18} /> Update Password
+            <button type="submit" className="primary-btn" disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {isSaving ? <Loader2 className="spin" size={18} /> : <Save size={18} />} Update Password
             </button>
             {isSaved && <span style={{ color: 'var(--accent-green)', fontSize: '0.9rem', fontWeight: 600 }} className="fadeIn">Password successfully updated!</span>}
           </div>

@@ -16,9 +16,11 @@ export default function Universities() {
   const defaultForm = {
     name: '', country: '', city: '', rank: '', status: 'Active',
     established_year: '', acceptance_rate: '', international_students: '',
-    campus_facilities: '', description: '', website: ''
+    campus_facilities: '', description: '', website: '', cut_off: ''
   };
   const [formData, setFormData] = useState(defaultForm);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     fetchUniversities();
@@ -71,6 +73,7 @@ export default function Universities() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      setIsSubmitting(true);
       if (editingUniversity) {
         await axios.put(`${API_URL}/${editingUniversity.id}`, formData);
       } else {
@@ -80,16 +83,21 @@ export default function Universities() {
       handleCloseModal();
     } catch (error) {
       console.error('Error saving university:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this university?')) {
       try {
+        setDeletingId(id);
         await axios.delete(`${API_URL}/${id}`);
         fetchUniversities();
       } catch (error) {
         console.error('Error deleting university:', error);
+      } finally {
+        setDeletingId(null);
       }
     }
   };
@@ -136,6 +144,7 @@ export default function Universities() {
               <th>Est. Year</th>
               <th>Acceptance Rate</th>
               <th>Int'l Students</th>
+              <th>Cut Off</th>
               <th>Status</th>
               <th style={{ textAlign: 'right', position: 'sticky', right: 0, background: 'white', zIndex: 1 }}>Actions</th>
             </tr>
@@ -175,13 +184,14 @@ export default function Universities() {
                 <td>{uni.established_year || '-'}</td>
                 <td>{uni.acceptance_rate || '-'}</td>
                 <td>{uni.international_students || '-'}</td>
+                <td>{uni.cut_off || '-'}</td>
                 <td>{getStatusBadge(uni.status)}</td>
                 <td style={{ textAlign: 'right', position: 'sticky', right: 0, background: 'white', zIndex: 1, boxShadow: '-2px 0 5px rgba(0,0,0,0.05)' }}>
                   <button className="action-btn" onClick={() => handleOpenModal(uni)}>
-                    <Edit2 size={18} />
+                    <Edit2 size={16} />
                   </button>
-                  <button className="action-btn delete" onClick={() => handleDelete(uni.id)}>
-                    <Trash2 size={18} />
+                  <button className="action-btn delete" onClick={() => handleDelete(uni.id)} disabled={deletingId === uni.id}>
+                    {deletingId === uni.id ? <Loader2 className="spin" size={16} /> : <Trash2 size={16} />}
                   </button>
                 </td>
               </tr>
@@ -289,6 +299,10 @@ export default function Universities() {
                       <input type="text" name="international_students" className="form-input" value={formData.international_students || ''} onChange={handleInputChange} placeholder="e.g. 45%" />
                     </div>
                   </div>
+                  <div style={{ marginTop: '1rem' }} className="form-group">
+                    <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Cut Off (e.g. GPA / Marks)</label>
+                    <input type="text" name="cut_off" className="form-input" value={formData.cut_off || ''} onChange={handleInputChange} placeholder="e.g. 85% / 3.5 GPA" />
+                  </div>
                 </div>
 
                 {/* Description & Facilities */}
@@ -308,8 +322,8 @@ export default function Universities() {
 
                 <div className="form-actions" style={{ marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
                   <button type="button" className="secondary-btn" onClick={handleCloseModal}>Cancel</button>
-                  <button type="submit" className="primary-btn" style={{ backgroundColor: 'var(--primary-main)', color: 'white', padding: '0.75rem 1.5rem' }}>
-                    {editingUniversity ? 'Save Changes' : 'Add University'}
+                  <button type="submit" className="primary-btn" disabled={isSubmitting} style={{ backgroundColor: 'var(--primary-main)', color: 'white', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {isSubmitting ? <><Loader2 className="spin" size={16} /> Saving...</> : (editingUniversity ? 'Save Changes' : 'Add University')}
                   </button>
                 </div>
               </form>
@@ -381,7 +395,11 @@ export default function Universities() {
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Int'l Students</span>
-                      <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>{viewingUniversity.international_students || '-'}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{viewingUniversity.international_students || '-'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Cut Off</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{viewingUniversity.cut_off || '-'}</span>
                     </div>
                   </div>
                 </div>

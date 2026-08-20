@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Mail, Phone, MapPin, Save, UserCircle } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Save, UserCircle, Loader2 } from 'lucide-react';
 
 export default function Profile() {
   const [formData, setFormData] = useState({
@@ -11,11 +11,16 @@ export default function Profile() {
   });
 
   const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    setIsSaving(true);
+    setTimeout(() => {
+      setIsSaving(false);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+    }, 1000);
   };
 
   return (
@@ -109,8 +114,8 @@ export default function Profile() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
-              <button type="submit" className="primary-btn" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Save size={18} /> Save Changes
+              <button type="submit" className="primary-btn" disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {isSaving ? <Loader2 className="spin" size={18} /> : <Save size={18} />} Save Changes
               </button>
               {isSaved && <span style={{ color: 'var(--accent-green)', fontSize: '0.9rem', fontWeight: 600 }} className="fadeIn">Successfully updated!</span>}
             </div>

@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 class StudentController extends Controller
 {
     public function index() { 
-        $students = Student::orderBy('id', 'desc')->get();
+        $students = Student::with('documents')->orderBy('id', 'desc')->get();
         $leads = \App\Models\Lead::whereIn('email', $students->pluck('email'))->get()->keyBy('email');
         
         $students->each(function($student) use ($leads) {
@@ -21,7 +21,8 @@ class StudentController extends Controller
         $emails = $approvedLeads->pluck('email')->filter()->toArray();
         $phones = $approvedLeads->pluck('phone')->filter()->toArray();
 
-        $students = Student::whereIn('email', $emails)
+        $students = Student::with('documents')
+            ->whereIn('email', $emails)
             ->orWhereIn('phone', $phones)
             ->orderBy('id', 'desc')
             ->get();
@@ -34,7 +35,7 @@ class StudentController extends Controller
     }
     
     public function store(Request $request) { 
-        $student = Student::create($request->except(['documents', 'document_names', '_method'])); 
+        $student = Student::create($request->except(['documents', 'document_names', '_method', 'lead_type'])); 
         $this->handleDocuments($request, $student);
         return $student->load('documents'); 
     }
@@ -42,7 +43,7 @@ class StudentController extends Controller
     public function show(Student $student) { return $student; }
     
     public function update(Request $request, Student $student) { 
-        $student->update($request->except(['documents', 'document_names', '_method'])); 
+        $student->update($request->except(['documents', 'document_names', '_method', 'lead_type'])); 
         $this->handleDocuments($request, $student);
         return $student->load('documents'); 
     }
@@ -53,6 +54,16 @@ class StudentController extends Controller
         }
         $student->delete(); 
         return response()->json(['message' => 'Deleted']); 
+    }
+
+    public function deleteDocument(Student $student, $documentId) {
+        $doc = $student->documents()->find($documentId);
+        if ($doc) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($doc->file_path);
+            $doc->delete();
+            return response()->json(['message' => 'Document deleted']);
+        }
+        return response()->json(['message' => 'Document not found'], 404);
     }
 
     private function handleDocuments(Request $request, Student $student) {

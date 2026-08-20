@@ -139,6 +139,9 @@ export default function FollowUp() {
   const [newNote, setNewNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [editNoteText, setEditNoteText] = useState('');
+  const [isSubmittingNote, setIsSubmittingNote] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState(null);
+  const [savingNoteId, setSavingNoteId] = useState(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -164,31 +167,24 @@ export default function FollowUp() {
 
     if (activeId === overId) return;
 
-    const isActiveTask = active.data.current?.sortable.containerId;
-    const isOverTask = over.data.current?.sortable.containerId;
+    setItems((prevItems) => {
+      const activeIndex = prevItems.findIndex(t => t.id === activeId);
+      const overIndex = prevItems.findIndex(t => t.id === overId);
 
-    if (!isActiveTask) return;
+      if (activeIndex === -1) return prevItems;
 
-    setItems((items) => {
-      const activeIndex = items.findIndex(t => t.id === activeId);
-      const overIndex = items.findIndex(t => t.id === overId);
+      let overColumn = Object.keys(COLUMNS).includes(overId) 
+        ? overId 
+        : (overIndex !== -1 ? prevItems[overIndex].column : null);
 
-      if (items[activeIndex].column !== over?.data?.current?.sortable?.containerId) {
-        // Find what column we are hovering over. 
-        // If overId is a column ID, move it there. Otherwise, get it from the item we are over.
-        let overColumn = Object.keys(COLUMNS).includes(overId) 
-          ? overId 
-          : items[overIndex]?.column;
-
-        if (!overColumn) overColumn = over.data.current?.sortable?.containerId;
-        
-        if (overColumn && items[activeIndex].column !== overColumn) {
-           const updatedItems = [...items];
-           updatedItems[activeIndex].column = overColumn;
-           return updatedItems;
-        }
+      if (!overColumn) overColumn = over.data?.current?.sortable?.containerId;
+      
+      if (overColumn && prevItems[activeIndex].column !== overColumn) {
+         const updatedItems = [...prevItems];
+         updatedItems[activeIndex] = { ...updatedItems[activeIndex], column: overColumn, type: overColumn };
+         return updatedItems;
       }
-      return items;
+      return prevItems;
     });
   };
 
@@ -200,29 +196,34 @@ export default function FollowUp() {
     const activeId = active.id;
     const overId = over.id;
 
-    if (activeId === overId) return;
+    let newColumn = Object.keys(COLUMNS).includes(overId) 
+        ? overId 
+        : over.data?.current?.sortable?.containerId;
 
-    let newColumn = null;
-    let itemDbId = null;
+    setItems((prevItems) => {
+      const activeIndex = prevItems.findIndex(t => t.id === activeId);
+      const overIndex = prevItems.findIndex(t => t.id === overId);
+      
+      if (activeIndex === -1) return prevItems;
 
-    setItems((items) => {
-      const activeIndex = items.findIndex(t => t.id === activeId);
-      const overIndex = items.findIndex(t => t.id === overId);
-
-      if (activeIndex !== -1) {
-        newColumn = items[activeIndex].column;
-        itemDbId = items[activeIndex].id;
+      if (!newColumn && overIndex !== -1) {
+          newColumn = prevItems[overIndex].column;
       }
 
-      if (activeIndex !== -1 && overIndex !== -1 && items[activeIndex].column === items[overIndex].column) {
-         return arrayMove(items, activeIndex, overIndex);
+      const updatedItems = [...prevItems];
+      if (newColumn && updatedItems[activeIndex].column !== newColumn) {
+          updatedItems[activeIndex] = { ...updatedItems[activeIndex], column: newColumn, type: newColumn };
       }
-      return items;
+
+      if (activeIndex !== -1 && overIndex !== -1 && updatedItems[activeIndex].column === updatedItems[overIndex].column && activeIndex !== overIndex) {
+         return arrayMove(updatedItems, activeIndex, overIndex);
+      }
+      return updatedItems;
     });
 
-    if (itemDbId && newColumn) {
+    if (newColumn && activeId) {
       try {
-        await axios.put(`${API_URL}/${itemDbId}`, { type: newColumn });
+        await axios.put(`${API_URL}/${activeId}`, { type: newColumn });
       } catch (err) {
         console.error('Failed to update lead status:', err);
       }
@@ -273,6 +274,7 @@ export default function FollowUp() {
     const updatedNotes = [...(selectedLead.notes || []), noteObj];
 
     try {
+      setIsSubmittingNote(true);
       await axios.put(`${API_URL}/${selectedLead.id}`, { notes: updatedNotes });
       const updatedItems = items.map(item => {
         if (item.id === selectedLead.id) {
@@ -285,12 +287,15 @@ export default function FollowUp() {
       setNewNote('');
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsSubmittingNote(false);
     }
   };
 
   const handleDeleteNote = async (noteId) => {
     const updatedNotes = selectedLead.notes.filter(n => n.id !== noteId);
     try {
+      setDeletingNoteId(noteId);
       await axios.put(`${API_URL}/${selectedLead.id}`, { notes: updatedNotes });
       const updatedItems = items.map(item => {
         if (item.id === selectedLead.id) {
@@ -302,6 +307,8 @@ export default function FollowUp() {
       setItems(updatedItems);
     } catch (err) {
       console.error(err);
+    } finally {
+      setDeletingNoteId(null);
     }
   };
 
@@ -316,6 +323,7 @@ export default function FollowUp() {
       n.id === noteId ? { ...n, text: editNoteText.trim() } : n
     );
     try {
+      setSavingNoteId(noteId);
       await axios.put(`${API_URL}/${selectedLead.id}`, { notes: updatedNotes });
       const updatedItems = items.map(item => {
         if (item.id === selectedLead.id) {
@@ -329,6 +337,8 @@ export default function FollowUp() {
       setEditNoteText('');
     } catch (err) {
       console.error(err);
+    } finally {
+      setSavingNoteId(null);
     }
   };
 
@@ -457,7 +467,9 @@ export default function FollowUp() {
                         {editingNoteId !== note.id && (
                           <div className="note-actions">
                             <button className="note-action-btn" onClick={() => startEditingNote(note)}><Edit2 size={14} /></button>
-                            <button className="note-action-btn delete" onClick={() => handleDeleteNote(note.id)}><Trash2 size={14} /></button>
+                            <button className="note-action-btn delete" onClick={() => handleDeleteNote(note.id)} disabled={deletingNoteId === note.id}>
+                              {deletingNoteId === note.id ? <Loader2 className="spin" size={14} /> : <Trash2 size={14} />}
+                            </button>
                           </div>
                         )}
                       </div>
@@ -471,8 +483,12 @@ export default function FollowUp() {
                             onChange={(e) => setEditNoteText(e.target.value)}
                             style={{ flex: 1, padding: '0.5rem' }}
                           />
-                          <button className="primary-btn" onClick={() => handleSaveEdit(note.id)} style={{ padding: '0.5rem 1rem' }}>Save</button>
+                          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                          <button className="primary-btn" onClick={() => handleSaveEdit(note.id)} disabled={savingNoteId === note.id} style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            {savingNoteId === note.id ? <Loader2 className="spin" size={14} /> : 'Save'}
+                          </button>
                           <button className="secondary-btn" onClick={() => setEditingNoteId(null)} style={{ padding: '0.5rem 1rem' }}>Cancel</button>
+                        </div>
                         </div>
                       ) : (
                         <p className="note-text">{note.text}</p>
@@ -496,8 +512,8 @@ export default function FollowUp() {
                   onChange={(e) => setNewNote(e.target.value)}
                   style={{ flex: 1, backgroundColor: '#f8fafc' }}
                 />
-                <button type="submit" className="primary-btn" style={{ padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }} disabled={!newNote.trim()}>
-                  <Plus size={18}/> Add
+                <button type="submit" className="primary-btn" style={{ padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }} disabled={!newNote.trim() || isSubmittingNote}>
+                  {isSubmittingNote ? <><Loader2 className="spin" size={16} /> Posting...</> : <><MessageSquare size={16} /> Post Note</>}
                 </button>
               </form>
             </div>

@@ -18,6 +18,8 @@ export default function Courses() {
     min_gpa_percentage: '', english_req: ''
   };
   const [formData, setFormData] = useState(defaultForm);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     fetchCourses();
@@ -59,6 +61,7 @@ export default function Courses() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      setIsSubmitting(true);
       if (editingCourse) {
         await axios.put(`${API_URL}/${editingCourse.id}`, formData);
       } else {
@@ -68,16 +71,21 @@ export default function Courses() {
       handleCloseModal();
     } catch (error) {
       console.error('Error saving course:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this course?')) {
       try {
+        setDeletingId(id);
         await axios.delete(`${API_URL}/${id}`);
         fetchCourses();
       } catch (error) {
         console.error('Error deleting course:', error);
+      } finally {
+        setDeletingId(null);
       }
     }
   };
@@ -169,10 +177,10 @@ export default function Courses() {
                 <td>{getStatusBadge(course.status)}</td>
                 <td style={{ textAlign: 'right', position: 'sticky', right: 0, background: 'white', zIndex: 1, boxShadow: '-2px 0 5px rgba(0,0,0,0.05)' }}>
                   <button className="action-btn" onClick={() => handleOpenModal(course)}>
-                    <Edit2 size={18} />
+                    <Edit2 size={16} />
                   </button>
-                  <button className="action-btn delete" onClick={() => handleDelete(course.id)}>
-                    <Trash2 size={18} />
+                  <button className="action-btn delete" onClick={() => handleDelete(course.id)} disabled={deletingId === course.id}>
+                    {deletingId === course.id ? <Loader2 className="spin" size={16} /> : <Trash2 size={16} />}
                   </button>
                 </td>
               </tr>
@@ -304,8 +312,8 @@ export default function Courses() {
 
                 <div className="form-actions" style={{ marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
                   <button type="button" className="secondary-btn" onClick={handleCloseModal}>Cancel</button>
-                  <button type="submit" className="primary-btn" style={{ backgroundColor: 'var(--primary-main)', color: 'white', padding: '0.75rem 1.5rem' }}>
-                    {editingCourse ? 'Save Changes' : 'Create Course'}
+                  <button type="submit" className="primary-btn" disabled={isSubmitting} style={{ backgroundColor: 'var(--primary-main)', color: 'white', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {isSubmitting ? <><Loader2 className="spin" size={16} /> Saving...</> : (editingCourse ? 'Save Changes' : 'Add Course')}
                   </button>
                 </div>
               </form>

@@ -27,6 +27,7 @@ import Services from './pages/Services';
 import Login from './pages/Login';
 import Profile from './pages/Profile';
 import PasswordReset from './pages/PasswordReset';
+import { downloadPageAsPDF } from './utils/pdfExport';
 
 function ProtectedRoute({ isAuthenticated, children }) {
   if (!isAuthenticated) {
@@ -40,6 +41,7 @@ function App() {
     return localStorage.getItem('edmoov_admin_auth') === 'true';
   });
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -57,7 +59,7 @@ function App() {
       case '/universities': return { subtitle: 'Overview', title: 'Universities' };
       case '/applications': return { subtitle: 'Overview', title: 'Approved Applications' };
       case '/courses': return { subtitle: 'Overview', title: 'Courses' };
-      case '/follow-up': return { subtitle: 'Overview', title: 'Follow Up Leads' };
+      case '/follow-up': return { subtitle: 'Overview', title: 'Lead Management' };
       case '/services': return { subtitle: 'Overview', title: 'Services' };
       case '/profile': return { subtitle: 'Account', title: 'My Profile' };
       case '/password-reset': return { subtitle: 'Security', title: 'Password Reset' };
@@ -109,7 +111,7 @@ function App() {
             <BookOpen size={16} /> Courses
           </NavLink>
           <NavLink to="/follow-up" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <MessageSquare size={16} /> Follow Up
+            <MessageSquare size={16} /> Lead Management
           </NavLink>
           <NavLink to="/services" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Settings size={16} /> Services
@@ -181,8 +183,16 @@ function App() {
             <h1>{pageTitle.title}</h1>
           </div>
           <div className="welcome-actions">
-            <button className="primary-btn" onClick={() => alert('Data export initiated! Your file will download shortly.')}>
-              Export Data
+            <button 
+              className="primary-btn no-print" 
+              onClick={async () => {
+                setIsExporting(true);
+                await downloadPageAsPDF(`edmoov-${pageTitle.title.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0,10)}.pdf`);
+                setIsExporting(false);
+              }}
+              disabled={isExporting}
+            >
+              {isExporting ? 'Generating...' : 'Export Data'}
             </button>
           </div>
         </div>

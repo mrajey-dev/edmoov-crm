@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Edit2, Trash2, X, User, Search, Loader2, Mail, Phone, MapPin, Activity, FileText, Download, GraduationCap } from 'lucide-react';
 import axios from 'axios';
 
@@ -10,9 +11,17 @@ const maxDobString = maxDob.toISOString().split('T')[0];
 
 export default function Students({ isApplicationsPage = false }) {
   const API_URL = isApplicationsPage ? `${BASE_API_URL}/applications` : `${BASE_API_URL}/students`;
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const initialLeadType = searchParams.get('lead_type') || 'all';
   
   const [students, setStudents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [leadTypeFilter, setLeadTypeFilter] = useState(initialLeadType);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [countryFilter, setCountryFilter] = useState('all');
+  const [financeFilter, setFinanceFilter] = useState('all');
+  const [qualificationFilter, setQualificationFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   const [countries, setCountries] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -26,10 +35,17 @@ export default function Students({ isApplicationsPage = false }) {
     parents_occupation: '', family_annual_income: '',
     finance_source: 'Self-funded',
     preferred_country: '', preferred_college: '', preferred_course: '',
+    preferred_country_2: '', preferred_college_2: '', preferred_course_2: '',
+    preferred_country_3: '', preferred_college_3: '', preferred_course_3: '',
     enrolled_date: ''
   };
   const [formData, setFormData] = useState(defaultForm);
   const [documents, setDocuments] = useState([]);
+  const [existingDocuments, setExistingDocuments] = useState([]);
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [deletingDocId, setDeletingDocId] = useState(null);
 
   const handleAddDocument = () => setDocuments([...documents, { name: '', file: null }]);
   const handleRemoveDocument = (index) => setDocuments(documents.filter((_, i) => i !== index));
@@ -72,10 +88,12 @@ export default function Students({ isApplicationsPage = false }) {
       setEditingStudent(student);
       setFormData({ ...defaultForm, ...student });
       setDocuments([]); // Start with clean slate for new uploads
+      setExistingDocuments(student.documents || []);
     } else {
       setEditingStudent(null);
       setFormData(defaultForm);
       setDocuments([]);
+      setExistingDocuments([]);
     }
     setIsModalOpen(true);
   };
@@ -107,6 +125,7 @@ export default function Students({ isApplicationsPage = false }) {
     }
 
     try {
+      setIsSubmitting(true);
       const data = new FormData();
       Object.keys(formData).forEach(key => {
         if (formData[key] !== null && formData[key] !== undefined) {
@@ -131,16 +150,37 @@ export default function Students({ isApplicationsPage = false }) {
       handleCloseModal();
     } catch (error) {
       console.error('Error saving student:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteExistingDocument = async (docId) => {
+    if (window.confirm('Are you sure you want to permanently delete this document?')) {
+      try {
+        setDeletingDocId(docId);
+        await axios.delete(`${API_URL}/${editingStudent.id}/documents/${docId}`);
+        setExistingDocuments(prev => prev.filter(d => d.id !== docId));
+        // Also refresh the background students list so viewing details is instantly updated
+        fetchStudents();
+      } catch (error) {
+        console.error('Error deleting document:', error);
+      } finally {
+        setDeletingDocId(null);
+      }
     }
   };
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this student?')) {
       try {
+        setDeletingId(id);
         await axios.delete(`${API_URL}/${id}`);
         fetchStudents();
       } catch (error) {
         console.error('Error deleting student:', error);
+      } finally {
+        setDeletingId(null);
       }
     }
   };
@@ -162,24 +202,100 @@ export default function Students({ isApplicationsPage = false }) {
     }
   };
 
-  const filteredStudents = students.filter(student => 
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.program.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStudents = students.filter(student => {
+    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          student.program.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesType = leadTypeFilter === 'all' || (student.lead_type && student.lead_type.toLowerCase() === leadTypeFilter.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' || (student.status && student.status.toLowerCase() === statusFilter.toLowerCase());
+    
+    const matchesCountry = countryFilter === 'all' || (student.preferred_country && student.preferred_country.toLowerCase() === countryFilter.toLowerCase());
+    
+    const matchesFinance = financeFilter === 'all' || (student.finance_source && student.finance_source.toLowerCase() === financeFilter.toLowerCase());
+    
+    const matchesQualification = qualificationFilter === 'all' || (student.highest_qualification && student.highest_qualification.toLowerCase() === qualificationFilter.toLowerCase());
+    
+    return matchesSearch && matchesType && matchesStatus && matchesCountry && matchesFinance && matchesQualification;
+  });
+
+  const availableCountries = [...new Set(students.map(s => s.preferred_country).filter(Boolean))].sort();
+  const availableFinanceSources = [...new Set(students.map(s => s.finance_source).filter(Boolean))].sort();
+  const availableQualifications = [...new Set(students.map(s => s.highest_qualification).filter(Boolean))].sort();
 
   return (
     <div className="card" style={{ minHeight: '600px' }}>
       <div className="card-header" style={{ justifyContent: 'space-between' }}>
-        <div className="search-container">
-          <Search size={18} className="search-icon" color="var(--text-muted)" />
-          <input 
-            type="text" 
-            className="search-input"
-            placeholder={isApplicationsPage ? "Search applications..." : "Search students..."}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
+          <div className="search-container" style={{ minWidth: '200px' }}>
+            <Search size={18} className="search-icon" color="var(--text-muted)" />
+            <input 
+              type="text" 
+              className="search-input"
+              placeholder={isApplicationsPage ? "Search applications..." : "Search students..."}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <select 
+            value={leadTypeFilter} 
+            onChange={(e) => setLeadTypeFilter(e.target.value)}
+            style={{ padding: '0.55rem', borderRadius: '6px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '0.875rem' }}
+          >
+            <option value="all">All Lead Types</option>
+            <option value="hot">Hot</option>
+            <option value="warm">Warm</option>
+            <option value="cold">Cold</option>
+            <option value="approved">Approved</option>
+            <option value="dead">Dead</option>
+          </select>
+          
+          <select 
+            value={statusFilter} 
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ padding: '0.55rem', borderRadius: '6px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '0.875rem' }}
+          >
+            <option value="all">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="graduated">Graduated</option>
+            <option value="inactive">Inactive</option>
+          </select>
+
+          <select 
+            value={countryFilter} 
+            onChange={(e) => setCountryFilter(e.target.value)}
+            style={{ padding: '0.55rem', borderRadius: '6px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '0.875rem' }}
+          >
+            <option value="all">All Countries</option>
+            {availableCountries.map(country => (
+              <option key={country} value={country.toLowerCase()}>{country}</option>
+            ))}
+          </select>
+
+          <select 
+            value={financeFilter} 
+            onChange={(e) => setFinanceFilter(e.target.value)}
+            style={{ padding: '0.55rem', borderRadius: '6px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '0.875rem' }}
+          >
+            <option value="all">All Finance</option>
+            {availableFinanceSources.map(finance => (
+              <option key={finance} value={finance.toLowerCase()}>{finance}</option>
+            ))}
+          </select>
+
+          <select 
+            value={qualificationFilter} 
+            onChange={(e) => setQualificationFilter(e.target.value)}
+            style={{ padding: '0.55rem', borderRadius: '6px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '0.875rem' }}
+          >
+            <option value="all">All Qualifications</option>
+            {availableQualifications.map(qual => (
+              <option key={qual} value={qual.toLowerCase()}>{qual}</option>
+            ))}
+          </select>
         </div>
         
         {!isApplicationsPage && (
@@ -257,16 +373,34 @@ export default function Students({ isApplicationsPage = false }) {
                 <td>{student.parents_occupation || '-'}</td>
                 <td>{student.family_annual_income || '-'}</td>
                 <td>{student.finance_source || '-'}</td>
-                <td>{student.preferred_country || '-'}</td>
-                <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{student.preferred_college || '-'}</td>
-                <td>{student.preferred_course || '-'}</td>
+                <td>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <span>{student.preferred_country || '-'}</span>
+                    {student.preferred_country_2 && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{student.preferred_country_2}</span>}
+                    {student.preferred_country_3 && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{student.preferred_country_3}</span>}
+                  </div>
+                </td>
+                <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{student.preferred_college || '-'}</span>
+                    {student.preferred_college_2 && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{student.preferred_college_2}</span>}
+                    {student.preferred_college_3 && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{student.preferred_college_3}</span>}
+                  </div>
+                </td>
+                <td>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <span>{student.preferred_course || '-'}</span>
+                    {student.preferred_course_2 && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{student.preferred_course_2}</span>}
+                    {student.preferred_course_3 && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{student.preferred_course_3}</span>}
+                  </div>
+                </td>
                 <td>{getStatusBadge(student.status, student.lead_type)}</td>
                 <td style={{ textAlign: 'right', position: 'sticky', right: 0, background: 'white', zIndex: 1, boxShadow: '-2px 0 5px rgba(0,0,0,0.05)' }}>
                   <button className="action-btn" onClick={() => handleOpenModal(student)}>
-                    <Edit2 size={18} />
+                    <Edit2 size={16} />
                   </button>
-                  <button className="action-btn delete" onClick={() => handleDelete(student.id)}>
-                    <Trash2 size={18} />
+                  <button className="action-btn delete" onClick={() => handleDelete(student.id)} disabled={deletingId === student.id}>
+                    {deletingId === student.id ? <Loader2 className="spin" size={16} /> : <Trash2 size={16} />}
                   </button>
                 </td>
               </tr>
@@ -349,18 +483,10 @@ export default function Students({ isApplicationsPage = false }) {
                           <input type="date" name="dob" max={maxDobString} className="form-input" value={formData.dob || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }} />
                         </div>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
                         <div className="form-group" style={{ marginBottom: 0 }}>
                           <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Passport Number</label>
                           <input type="text" name="passport_number" className="form-input" value={formData.passport_number || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }} />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Enrollment Status</label>
-                          <select name="status" className="form-select" value={formData.status || 'Active'} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }}>
-                            <option value="Active">Active</option>
-                            <option value="Pending">Pending</option>
-                            <option value="Graduated">Graduated</option>
-                          </select>
                         </div>
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
@@ -410,34 +536,105 @@ export default function Students({ isApplicationsPage = false }) {
 
                   {activeTab === 'study' && (
                     <>
-                      <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--primary-dark)' }}>Study Preferences</h4>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred Country</label>
-                          <select name="preferred_country" className="form-select" value={formData.preferred_country || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }}>
-                            <option value="">Select Country</option>
-                            {countries.length > 0 ? countries.map((country, idx) => (
-                              <option key={idx} value={country}>{country}</option>
-                            )) : (
-                              <>
-                                <option value="USA">USA</option>
-                                <option value="UK">UK</option>
-                                <option value="Canada">Canada</option>
-                                <option value="Australia">Australia</option>
-                                <option value="Germany">Germany</option>
-                                <option value="Other">Other</option>
-                              </>
-                            )}
-                          </select>
+                      <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--primary-dark)' }}>Study Preferences (Max 3)</h4>
+                      
+                      {/* Preference 1 */}
+                      <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '1rem', backgroundColor: '#fff' }}>
+                        <h5 style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--text-main)' }}>Preference 1 (Primary)</h5>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred Country</label>
+                            <select name="preferred_country" className="form-select" value={formData.preferred_country || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }}>
+                              <option value="">Select Country</option>
+                              {countries.length > 0 ? countries.map((country, idx) => (
+                                <option key={idx} value={country}>{country}</option>
+                              )) : (
+                                <>
+                                  <option value="USA">USA</option>
+                                  <option value="UK">UK</option>
+                                  <option value="Canada">Canada</option>
+                                  <option value="Australia">Australia</option>
+                                  <option value="Germany">Germany</option>
+                                  <option value="Other">Other</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred Course</label>
+                            <input type="text" name="preferred_course" className="form-input" value={formData.preferred_course || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }} />
+                          </div>
                         </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred Course</label>
-                          <input type="text" name="preferred_course" className="form-input" value={formData.preferred_course || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }} />
+                        <div className="form-group" style={{ marginBottom: 0, marginTop: '1rem' }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred College / University</label>
+                          <input type="text" name="preferred_college" className="form-input" value={formData.preferred_college || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }} />
                         </div>
                       </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred College / University</label>
-                        <input type="text" name="preferred_college" className="form-input" value={formData.preferred_college || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }} />
+
+                      {/* Preference 2 */}
+                      <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '1rem', backgroundColor: '#fff' }}>
+                        <h5 style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--text-main)' }}>Preference 2 (Optional)</h5>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred Country</label>
+                            <select name="preferred_country_2" className="form-select" value={formData.preferred_country_2 || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }}>
+                              <option value="">Select Country</option>
+                              {countries.length > 0 ? countries.map((country, idx) => (
+                                <option key={idx} value={country}>{country}</option>
+                              )) : (
+                                <>
+                                  <option value="USA">USA</option>
+                                  <option value="UK">UK</option>
+                                  <option value="Canada">Canada</option>
+                                  <option value="Australia">Australia</option>
+                                  <option value="Germany">Germany</option>
+                                  <option value="Other">Other</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred Course</label>
+                            <input type="text" name="preferred_course_2" className="form-input" value={formData.preferred_course_2 || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }} />
+                          </div>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0, marginTop: '1rem' }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred College / University</label>
+                          <input type="text" name="preferred_college_2" className="form-input" value={formData.preferred_college_2 || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }} />
+                        </div>
+                      </div>
+
+                      {/* Preference 3 */}
+                      <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '1rem', backgroundColor: '#fff' }}>
+                        <h5 style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--text-main)' }}>Preference 3 (Optional)</h5>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred Country</label>
+                            <select name="preferred_country_3" className="form-select" value={formData.preferred_country_3 || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }}>
+                              <option value="">Select Country</option>
+                              {countries.length > 0 ? countries.map((country, idx) => (
+                                <option key={idx} value={country}>{country}</option>
+                              )) : (
+                                <>
+                                  <option value="USA">USA</option>
+                                  <option value="UK">UK</option>
+                                  <option value="Canada">Canada</option>
+                                  <option value="Australia">Australia</option>
+                                  <option value="Germany">Germany</option>
+                                  <option value="Other">Other</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred Course</label>
+                            <input type="text" name="preferred_course_3" className="form-input" value={formData.preferred_course_3 || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }} />
+                          </div>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0, marginTop: '1rem' }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Preferred College / University</label>
+                          <input type="text" name="preferred_college_3" className="form-input" value={formData.preferred_college_3 || ''} onChange={handleInputChange} style={{ backgroundColor: '#f8fafc' }} />
+                        </div>
                       </div>
                       
                       <h4 style={{ margin: '1rem 0 0 0', fontSize: '0.9rem', color: 'var(--primary-dark)' }}>Finance & Dashboard</h4>
@@ -470,15 +667,32 @@ export default function Students({ isApplicationsPage = false }) {
                           <Plus size={14} /> Add Document
                         </button>
                       </div>
-                      
-                      {documents.length === 0 ? (
-                        <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed var(--border-color)', color: 'var(--text-muted)' }}>
-                          No documents added yet. Click the button above to upload.
+
+                      {existingDocuments.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                          <h5 style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Previously Uploaded</h5>
+                          {existingDocuments.map((doc) => (
+                            <div key={doc.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', backgroundColor: '#ffffff', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                              <FileText size={18} color="var(--primary-main)" style={{ marginLeft: '0.5rem' }} />
+                              <div style={{ flex: 1, marginLeft: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
+                                {doc.document_name}
+                              </div>
+                              <a href={`http://127.0.0.1:8000/storage/${doc.file_path}`} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--primary-main)', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500, marginRight: '1rem' }}>
+                                <Download size={16} />
+                              </a>
+                              <button type="button" onClick={() => handleDeleteExistingDocument(doc.id)} disabled={deletingDocId === doc.id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: '#ef4444', cursor: 'pointer', padding: '0.4rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {deletingDocId === doc.id ? <Loader2 className="spin" size={16} /> : <Trash2 size={16} />}
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ) : (
+                      )}
+                      
+                      {documents.length > 0 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          <h5 style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>New Uploads</h5>
                           {documents.map((doc, index) => (
-                            <div key={index} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', backgroundColor: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div key={index} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', backgroundColor: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px dashed var(--border-color)' }}>
                               <div style={{ flex: 1 }}>
                                 <input type="text" className="form-input" placeholder="Document Name (e.g., Passport)" value={doc.name} onChange={(e) => handleDocumentChange(index, 'name', e.target.value)} required style={{ backgroundColor: 'white' }} />
                               </div>
@@ -490,6 +704,12 @@ export default function Students({ isApplicationsPage = false }) {
                               </button>
                             </div>
                           ))}
+                        </div>
+                      )}
+
+                      {documents.length === 0 && existingDocuments.length === 0 && (
+                        <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed var(--border-color)', color: 'var(--text-muted)' }}>
+                          No documents added yet. Click the button above to upload.
                         </div>
                       )}
                     </>
@@ -505,8 +725,8 @@ export default function Students({ isApplicationsPage = false }) {
                         Back
                       </button>
                     )}
-                    <button type="submit" className="primary-btn" style={{ backgroundColor: 'var(--primary-main)', color: 'white', padding: '0.75rem 1.5rem' }}>
-                      {activeTab !== 'documents' ? 'Next' : (editingStudent ? 'Save Changes' : 'Add Student')}
+                    <button type="submit" className="primary-btn" disabled={isSubmitting} style={{ backgroundColor: 'var(--primary-main)', color: 'white', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {isSubmitting ? <><Loader2 className="spin" size={16} /> {activeTab !== 'documents' ? 'Processing...' : 'Saving...'}</> : (activeTab !== 'documents' ? 'Next' : (editingStudent ? 'Save Changes' : 'Add Student'))}
                     </button>
                   </div>
                 </div>
@@ -607,19 +827,56 @@ export default function Students({ isApplicationsPage = false }) {
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-dark)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <FileText size={18} /> Study Preferences & Finance
                 </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
                   <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. Country</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. 1 - Country</span>
                     <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-main)', fontSize: '0.95rem' }}>{viewingStudent.preferred_country || '-'}</p>
                   </div>
                   <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. College</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. 1 - College</span>
                     <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-main)', fontSize: '0.95rem' }}>{viewingStudent.preferred_college || '-'}</p>
                   </div>
                   <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. Course</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. 1 - Course</span>
                     <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-main)', fontSize: '0.95rem' }}>{viewingStudent.preferred_course || '-'}</p>
                   </div>
+                </div>
+
+                {(viewingStudent.preferred_country_2 || viewingStudent.preferred_college_2 || viewingStudent.preferred_course_2) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
+                    <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. 2 - Country</span>
+                      <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-main)', fontSize: '0.95rem' }}>{viewingStudent.preferred_country_2 || '-'}</p>
+                    </div>
+                    <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. 2 - College</span>
+                      <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-main)', fontSize: '0.95rem' }}>{viewingStudent.preferred_college_2 || '-'}</p>
+                    </div>
+                    <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. 2 - Course</span>
+                      <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-main)', fontSize: '0.95rem' }}>{viewingStudent.preferred_course_2 || '-'}</p>
+                    </div>
+                  </div>
+                )}
+
+                {(viewingStudent.preferred_country_3 || viewingStudent.preferred_college_3 || viewingStudent.preferred_course_3) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
+                    <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. 3 - Country</span>
+                      <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-main)', fontSize: '0.95rem' }}>{viewingStudent.preferred_country_3 || '-'}</p>
+                    </div>
+                    <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. 3 - College</span>
+                      <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-main)', fontSize: '0.95rem' }}>{viewingStudent.preferred_college_3 || '-'}</p>
+                    </div>
+                    <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Pref. 3 - Course</span>
+                      <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-main)', fontSize: '0.95rem' }}>{viewingStudent.preferred_course_3 || '-'}</p>
+                    </div>
+                  </div>
+                )}
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
                   <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                     <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem', display: 'block', fontWeight: 600 }}>Enrolled Program</span>
                     <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-main)', fontSize: '0.95rem' }}>{viewingStudent.program || '-'}</p>
@@ -635,11 +892,11 @@ export default function Students({ isApplicationsPage = false }) {
                 </div>
               </div>
 
-              {viewingStudent.documents && viewingStudent.documents.length > 0 && (
-                <div style={{ marginTop: '1.5rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-dark)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <FileText size={18} /> Uploaded Documents
-                  </h3>
+              <div style={{ marginTop: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-dark)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <FileText size={18} /> Uploaded Documents
+                </h3>
+                {viewingStudent.documents && viewingStudent.documents.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {viewingStudent.documents.map((doc, index) => (
                       <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
@@ -653,8 +910,12 @@ export default function Students({ isApplicationsPage = false }) {
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div style={{ padding: '1.5rem', textAlign: 'center', borderRadius: '12px', border: '1px dashed var(--border-color)', background: '#f8fafc', color: 'var(--text-muted)' }}>
+                    No documents have been uploaded for this student yet.
+                  </div>
+                )}
+              </div>
 
               <div style={{ marginTop: '2rem' }}>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-dark)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

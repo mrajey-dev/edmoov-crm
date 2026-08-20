@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
+  PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
 
 const API_URL = 'http://127.0.0.1:8000/api/dashboard/stats';
@@ -48,9 +48,11 @@ export default function Dashboard() {
     courses_offered: 0,
     total_leads: 0,
     success_rate: 0,
+    total_revenue: 0,
     lead_trend_data: defaultLeadTrendData,
     recent_leads: [],
     lead_distribution: defaultLeadDistribution,
+    revenue_by_lead_type: [],
     spark_data: {
       universities: defaultSparkData,
       applications: defaultSparkData,
@@ -59,6 +61,17 @@ export default function Dashboard() {
     }
   });
   const [isLoading, setIsLoading] = React.useState(true);
+
+  const [enrollmentPeriod, setEnrollmentPeriod] = React.useState('1m');
+
+  const [enrollmentData, setEnrollmentData] = React.useState({
+    current_enrollments: 0,
+    previous_enrollments: 0,
+    growth: 0,
+    chart_data: []
+  });
+
+  const [isEnrollmentLoading, setIsEnrollmentLoading] = React.useState(true);
 
   React.useEffect(() => {
     const fetchStats = async () => {
@@ -73,6 +86,21 @@ export default function Dashboard() {
     };
     fetchStats();
   }, []);
+
+  React.useEffect(() => {
+    const fetchEnrollments = async () => {
+      setIsEnrollmentLoading(true);
+      try {
+        const response = await axios.get(`http://127.0.0.1:8000/api/dashboard/enrollments?period=${enrollmentPeriod}`);
+        setEnrollmentData(response.data);
+      } catch (error) {
+        console.error('Failed to fetch enrollment data:', error);
+      } finally {
+        setIsEnrollmentLoading(false);
+      }
+    };
+    fetchEnrollments();
+  }, [enrollmentPeriod]);
 
   const renderGrowth = (value) => {
     if (value === undefined || value === null) return <Loader2 size={12} className="spinner" />;
@@ -89,7 +117,7 @@ export default function Dashboard() {
   return (
     <div className="dashboard-wrapper">
       {/* Stats Row */}
-      <div className="stats-row">
+      <div className="stats-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         {/* Card 1: Dark Green (Students) */}
         <div className="stat-card-modern dark-green" onClick={() => navigate('/students')} style={{ cursor: 'pointer' }}>
           <div className="stat-card-header">
@@ -163,6 +191,107 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* NEW: Student Enrollments Interactive Section */}
+      <div className="card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
+        <div className="card-header" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 className="card-title" style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>Student Enrollments</h3>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>New students registered</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '0.25rem', borderRadius: '8px' }}>
+              {['1m', '3m', '6m', '1y'].map((period) => (
+                <button
+                  key={period}
+                  onClick={() => setEnrollmentPeriod(period)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    background: enrollmentPeriod === period ? '#fff' : 'transparent',
+                    boxShadow: enrollmentPeriod === period ? 'var(--shadow-sm)' : 'none',
+                    color: enrollmentPeriod === period ? 'var(--text-main)' : 'var(--text-muted)',
+                    fontWeight: enrollmentPeriod === period ? 600 : 500,
+                    transition: 'all 0.2s ease',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  {period.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            
+            <div style={{ textAlign: 'right', minWidth: '150px' }}>
+              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--primary-dark)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
+               {isEnrollmentLoading ? <Loader2 className="spinner" size={32} /> : `${enrollmentData.current_enrollments.toLocaleString()}`}
+              </div>
+              <div style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>
+               {isEnrollmentLoading ? null : renderGrowth(enrollmentData.growth)}
+               <span style={{ color: 'var(--text-muted)' }}>
+                 vs previous {enrollmentPeriod === '1m' ? 'month' : enrollmentPeriod === '3m' ? '3 months' : enrollmentPeriod === '6m' ? '6 months' : 'year'}
+               </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div style={{ height: '300px', width: '100%', position: 'relative' }}>
+             {isEnrollmentLoading ? (
+               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 10 }}>
+                 <Loader2 className="spinner" size={40} color="var(--primary-main)" />
+               </div>
+             ) : null}
+             <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={enrollmentData.chart_data}>
+                    <defs>
+                      <linearGradient id="colorEnrollments" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--primary-main)" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="var(--primary-main)" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorPrevEnrollments" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#94a3b8" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 12, fill: '#64748b' }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: 'var(--shadow-md)', padding: '12px' }}
+                      itemStyle={{ fontWeight: 600 }}
+                      formatter={(value, name) => [
+                        `${value.toLocaleString()}`, 
+                        name === 'enrollments' ? 'Current Period' : 'Previous Period'
+                      ]}
+                      labelStyle={{ color: 'var(--text-muted)', marginBottom: '8px' }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="previous_enrollments" 
+                      stroke="#cbd5e1" 
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      fillOpacity={1} 
+                      fill="url(#colorPrevEnrollments)" 
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="enrollments" 
+                      stroke="var(--primary-main)" 
+                      strokeWidth={3}
+                      fillOpacity={1} 
+                      fill="url(#colorEnrollments)" 
+                    />
+                  </AreaChart>
+             </ResponsiveContainer>
+        </div>
+      </div>
+
       {/* Charts Grid */}
       <div className="charts-grid">
         {/* Recent Leads */}
@@ -232,7 +361,12 @@ export default function Dashboard() {
                   dataKey="value"
                 >
                   {stats.lead_distribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={entry.color}
+                      onClick={() => navigate(`/students?lead_type=${entry.name.split(' ')[0].toLowerCase()}`)}
+                      style={{ cursor: 'pointer' }}
+                    />
                   ))}
                 </Pie>
                 <Tooltip
@@ -245,12 +379,19 @@ export default function Dashboard() {
 
           <div className="custom-legend">
             {stats.lead_distribution.map((item, index) => (
-              <div key={index} className="legend-item">
-                <div className="legend-label">
+              <div
+                key={index}
+                className="legend-item"
+                style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '0.5rem', alignItems: 'center', cursor: 'pointer' }}
+                onClick={() => navigate(`/students?lead_type=${item.name.split(' ')[0].toLowerCase()}`)}
+              >
+                <div className="legend-label" style={{ display: 'flex', alignItems: 'center' }}>
                   <span className="legend-dot" style={{ backgroundColor: item.color }}></span>
-                  {item.name}
+                  {item.name} <span style={{ color: 'var(--text-muted)', marginLeft: '0.4rem', fontSize: '0.75rem' }}>({item.value})</span>
                 </div>
-                <span className="legend-value">{item.value}</span>
+                <span className="legend-value" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.85rem' }}>
+                  ₹{item.revenue?.toLocaleString() || 0}
+                </span>
               </div>
             ))}
           </div>
@@ -258,12 +399,11 @@ export default function Dashboard() {
       </div>
 
       <div className="dashboard-grid">
-        {/* Active Universities / Jobs */}
         <div className="card">
           <div className="card-header">
             <div className="card-title-wrap">
               <span className="card-title">Top Universities</span>
-              <span className="card-subtitle">24 <span>Institutions</span></span>
+              <span className="card-subtitle">{stats.top_universities?.length || 0} <span>Institutions</span></span>
             </div>
             <div className="card-actions">
               <button className="icon-btn-small"><ArrowLeft size={16} /></button>
@@ -271,34 +411,21 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="list-container">
-            <div className="list-item">
-              <div className="list-icon" style={{ color: '#f97316' }}><Briefcase size={20} /></div>
-              <div className="list-content">
-                <div className="list-title">Harvard University</div>
-                <div className="list-desc">USA</div>
+            {stats.top_universities && stats.top_universities.map((uni, index) => (
+              <div className="list-item" key={index}>
+                <div className="list-icon" style={{ color: ['#f97316', '#22c55e', '#3b82f6', '#64748b', '#8b5cf6'][index % 5] }}><Briefcase size={20} /></div>
+                <div className="list-content" style={{ flex: 1 }}>
+                  <div className="list-title">{uni.name}</div>
+                  <div className="list-desc">{uni.country}</div>
+                </div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', textAlign: 'right' }}>
+                  {uni.count} <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 400 }}>Leads</span>
+                </div>
               </div>
-            </div>
-            <div className="list-item">
-              <div className="list-icon" style={{ color: '#22c55e' }}><Briefcase size={20} /></div>
-              <div className="list-content">
-                <div className="list-title">Oxford University</div>
-                <div className="list-desc">UK</div>
-              </div>
-            </div>
-            <div className="list-item">
-              <div className="list-icon" style={{ color: '#3b82f6' }}><Briefcase size={20} /></div>
-              <div className="list-content">
-                <div className="list-title">University of Toronto</div>
-                <div className="list-desc">Canada</div>
-              </div>
-            </div>
-            <div className="list-item">
-              <div className="list-icon" style={{ color: '#64748b' }}><Briefcase size={20} /></div>
-              <div className="list-content">
-                <div className="list-title">University of Melbourne</div>
-                <div className="list-desc">Australia</div>
-              </div>
-            </div>
+            ))}
+            {(!stats.top_universities || stats.top_universities.length === 0) && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No data available</div>
+            )}
           </div>
         </div>
 
@@ -307,7 +434,7 @@ export default function Dashboard() {
           <div className="card-header">
             <div className="card-title-wrap">
               <span className="card-title">Top Courses</span>
-              <span className="card-subtitle">15 <span>Programs</span></span>
+              <span className="card-subtitle">{stats.top_courses?.length || 0} <span>Programs</span></span>
             </div>
             <div className="card-actions">
               <button className="icon-btn-small"><ArrowLeft size={16} /></button>
@@ -315,27 +442,21 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="list-container">
-            <div className="list-item">
-              <div className="list-icon" style={{ color: '#f97316' }}><BookOpen size={20} /></div>
-              <div className="list-content">
-                <div className="list-title">MBA</div>
-                <div className="list-desc">Business Administration</div>
+            {stats.top_courses && stats.top_courses.map((course, index) => (
+              <div className="list-item" key={index}>
+                <div className="list-icon" style={{ color: ['#8b5cf6', '#ef4444', '#14b8a6', '#f59e0b', '#3b82f6'][index % 5] }}><BookOpen size={20} /></div>
+                <div className="list-content" style={{ flex: 1 }}>
+                  <div className="list-title">{course.name}</div>
+                  <div className="list-desc">{course.university}</div>
+                </div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', textAlign: 'right' }}>
+                  {course.count} <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 400 }}>Leads</span>
+                </div>
               </div>
-            </div>
-            <div className="list-item">
-              <div className="list-icon" style={{ color: '#3b82f6' }}><BookOpen size={20} /></div>
-              <div className="list-content">
-                <div className="list-title">MSc Computer Science</div>
-                <div className="list-desc">Technology & Engineering</div>
-              </div>
-            </div>
-            <div className="list-item">
-              <div className="list-icon" style={{ color: '#22c55e' }}><BookOpen size={20} /></div>
-              <div className="list-content">
-                <div className="list-title">Data Science</div>
-                <div className="list-desc">Analytics</div>
-              </div>
-            </div>
+            ))}
+            {(!stats.top_courses || stats.top_courses.length === 0) && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No data available</div>
+            )}
           </div>
         </div>
 
@@ -391,6 +512,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
 
       </div>
     </div>
