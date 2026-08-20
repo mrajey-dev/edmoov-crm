@@ -5,7 +5,15 @@ use Illuminate\Http\Request;
 
 class LeadController extends Controller
 {
-    public function index() { return Lead::orderBy('id', 'desc')->get(); }
+    public function index() { 
+        $leads = Lead::orderBy('id', 'desc')->get(); 
+        $emails = $leads->pluck('email')->toArray();
+        $students = \App\Models\Student::whereIn('email', $emails)->get()->keyBy('email');
+        foreach ($leads as $lead) {
+            $lead->student = $students->get($lead->email);
+        }
+        return $leads;
+    }
     public function store(Request $request) { 
         $data = $request->all();
         if (isset($data['notes']) && is_array($data['notes'])) {

@@ -387,10 +387,10 @@ export default function Dashboard() {
               >
                 <div className="legend-label" style={{ display: 'flex', alignItems: 'center' }}>
                   <span className="legend-dot" style={{ backgroundColor: item.color }}></span>
-                  {item.name} <span style={{ color: 'var(--text-muted)', marginLeft: '0.4rem', fontSize: '0.75rem' }}>({item.value})</span>
+                  {item.name}
                 </div>
                 <span className="legend-value" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.85rem' }}>
-                  ₹{item.revenue?.toLocaleString() || 0}
+                  {item.value} Students
                 </span>
               </div>
             ))}

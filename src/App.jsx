@@ -28,6 +28,13 @@ import Login from './pages/Login';
 import Profile from './pages/Profile';
 import PasswordReset from './pages/PasswordReset';
 import { downloadPageAsPDF } from './utils/pdfExport';
+import axios from 'axios';
+
+// Set axios default header if token exists
+const token = localStorage.getItem('auth_token');
+if (token) {
+  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+}
 
 function ProtectedRoute({ isAuthenticated, children }) {
   if (!isAuthenticated) {
@@ -161,9 +168,17 @@ function App() {
                   <div className="dropdown-divider"></div>
                   <button 
                     className="dropdown-item text-danger" 
-                    onClick={() => {
+                    onClick={async () => {
                       setIsProfileOpen(false);
+                      try {
+                        await axios.post('http://127.0.0.1:8000/api/logout');
+                      } catch (e) {
+                        console.error('Logout error', e);
+                      }
                       localStorage.removeItem('edmoov_admin_auth');
+                      localStorage.removeItem('auth_token');
+                      localStorage.removeItem('user');
+                      delete axios.defaults.headers.common['Authorization'];
                       setIsAuthenticated(false);
                     }}
                   >

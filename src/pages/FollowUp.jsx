@@ -429,7 +429,7 @@ export default function FollowUp() {
               </div>
 
               {/* Student Data Grid */}
-              <div className="student-data-grid">
+              <div className="student-data-grid" style={{ marginBottom: '1.5rem' }}>
                 <div>
                   <span className="form-label" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Email Address</span>
                   <p style={{ margin: 0, color: 'var(--text-main)', fontWeight: 500, fontSize: '0.9rem' }}>{selectedLead.email}</p>
@@ -447,6 +447,40 @@ export default function FollowUp() {
                   <p style={{ margin: 0, color: 'var(--text-main)', fontWeight: 500, fontSize: '0.9rem' }}>{selectedLead.date}, 2026</p>
                 </div>
               </div>
+
+              {selectedLead.student && (
+                <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#f8fafc', marginBottom: '1.5rem' }}>
+                  <h4 style={{ margin: '0 0 1rem 0', fontSize: '1rem', color: 'var(--primary-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <BookOpen size={16} /> Registered Student Details
+                  </h4>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>Highest Qualification</span>
+                      <p style={{ margin: '0.25rem 0 0 0', fontWeight: 500, color: 'var(--text-main)', fontSize: '0.9rem' }}>{selectedLead.student.highest_qualification || '-'}</p>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>Grades (%)</span>
+                      <p style={{ margin: '0.25rem 0 0 0', fontWeight: 500, color: 'var(--text-main)', fontSize: '0.9rem' }}>{selectedLead.student.grades_percentage || '-'}</p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>Pref. Country</span>
+                      <p style={{ margin: '0.25rem 0 0 0', fontWeight: 500, color: 'var(--text-main)', fontSize: '0.9rem' }}>{selectedLead.student.preferred_country || '-'}</p>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>Pref. College</span>
+                      <p style={{ margin: '0.25rem 0 0 0', fontWeight: 500, color: 'var(--text-main)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={selectedLead.student.preferred_college}>{selectedLead.student.preferred_college || '-'}</p>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>Pref. Course</span>
+                      <p style={{ margin: '0.25rem 0 0 0', fontWeight: 500, color: 'var(--text-main)', fontSize: '0.9rem' }}>{selectedLead.student.preferred_course || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Notes Section */}
               <div className="modal-section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
