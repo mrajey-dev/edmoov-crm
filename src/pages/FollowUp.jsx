@@ -26,8 +26,8 @@ const COLUMNS = {
   hot: { title: 'Hot Leads', color: '#ff4500' },
   warm: { title: 'Warm Leads', color: '#facc15' },
   cold: { title: 'Cold Leads', color: '#3b82f6' },
-  approved: { title: 'Approved', color: '#10b981' },
-  dead: { title: 'Dead Leads', color: '#64748b' }
+  dead: { title: 'Dead Leads', color: '#64748b' },
+  approved: { title: 'Applicant', color: '#10b981' }
 };
 
 function SortableItem({ item, onClick }) {

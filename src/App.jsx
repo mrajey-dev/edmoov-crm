@@ -113,6 +113,9 @@ function App() {
             <NavLink to="/raw-leads" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <UserCircle size={16} /> Raw lead
             </NavLink>
+            <NavLink to="/follow-up" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <MessageSquare size={16} /> Lead Management
+            </NavLink>
             <NavLink to="/students" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Users size={16} /> Students
             </NavLink>
@@ -121,9 +124,6 @@ function App() {
             </NavLink>
             <NavLink to="/courses" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <BookOpen size={16} /> Courses
-            </NavLink>
-            <NavLink to="/follow-up" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <MessageSquare size={16} /> Lead Management
             </NavLink>
             <NavLink to="/services" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Settings size={16} /> Services
