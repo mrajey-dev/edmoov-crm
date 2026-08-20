@@ -221,74 +221,74 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
-            
+
             <div style={{ textAlign: 'right', minWidth: '150px' }}>
               <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--primary-dark)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
-               {isEnrollmentLoading ? <Loader2 className="spinner" size={32} /> : `${enrollmentData.current_enrollments.toLocaleString()}`}
+                {isEnrollmentLoading ? <Loader2 className="spinner" size={32} /> : `${enrollmentData.current_enrollments.toLocaleString()}`}
               </div>
               <div style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>
-               {isEnrollmentLoading ? null : renderGrowth(enrollmentData.growth)}
-               <span style={{ color: 'var(--text-muted)' }}>
-                 vs previous {enrollmentPeriod === '1m' ? 'month' : enrollmentPeriod === '3m' ? '3 months' : enrollmentPeriod === '6m' ? '6 months' : 'year'}
-               </span>
+                {isEnrollmentLoading ? null : renderGrowth(enrollmentData.growth)}
+                <span style={{ color: 'var(--text-muted)' }}>
+                  vs previous {enrollmentPeriod === '1m' ? 'month' : enrollmentPeriod === '3m' ? '3 months' : enrollmentPeriod === '6m' ? '6 months' : 'year'}
+                </span>
               </div>
             </div>
           </div>
         </div>
-        
+
         <div style={{ height: '300px', width: '100%', position: 'relative' }}>
-             {isEnrollmentLoading ? (
-               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 10 }}>
-                 <Loader2 className="spinner" size={40} color="var(--primary-main)" />
-               </div>
-             ) : null}
-             <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={enrollmentData.chart_data}>
-                    <defs>
-                      <linearGradient id="colorEnrollments" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--primary-main)" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="var(--primary-main)" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorPrevEnrollments" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.2}/>
-                        <stop offset="95%" stopColor="#94a3b8" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 12, fill: '#64748b' }}
-                    />
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: 'var(--shadow-md)', padding: '12px' }}
-                      itemStyle={{ fontWeight: 600 }}
-                      formatter={(value, name) => [
-                        `${value.toLocaleString()}`, 
-                        name === 'enrollments' ? 'Current Period' : 'Previous Period'
-                      ]}
-                      labelStyle={{ color: 'var(--text-muted)', marginBottom: '8px' }}
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="previous_enrollments" 
-                      stroke="#cbd5e1" 
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      fillOpacity={1} 
-                      fill="url(#colorPrevEnrollments)" 
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="enrollments" 
-                      stroke="var(--primary-main)" 
-                      strokeWidth={3}
-                      fillOpacity={1} 
-                      fill="url(#colorEnrollments)" 
-                    />
-                  </AreaChart>
-             </ResponsiveContainer>
+          {isEnrollmentLoading ? (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 10 }}>
+              <Loader2 className="spinner" size={40} color="var(--primary-main)" />
+            </div>
+          ) : null}
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={enrollmentData.chart_data}>
+              <defs>
+                <linearGradient id="colorEnrollments" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="var(--primary-main)" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="var(--primary-main)" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="colorPrevEnrollments" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#94a3b8" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 12, fill: '#64748b' }}
+              />
+              <Tooltip
+                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: 'var(--shadow-md)', padding: '12px' }}
+                itemStyle={{ fontWeight: 600 }}
+                formatter={(value, name) => [
+                  `${value.toLocaleString()}`,
+                  name === 'enrollments' ? 'Current Period' : 'Previous Period'
+                ]}
+                labelStyle={{ color: 'var(--text-muted)', marginBottom: '8px' }}
+              />
+              <Area
+                type="monotone"
+                dataKey="previous_enrollments"
+                stroke="#cbd5e1"
+                strokeWidth={2}
+                strokeDasharray="5 5"
+                fillOpacity={1}
+                fill="url(#colorPrevEnrollments)"
+              />
+              <Area
+                type="monotone"
+                dataKey="enrollments"
+                stroke="var(--primary-main)"
+                strokeWidth={3}
+                fillOpacity={1}
+                fill="url(#colorEnrollments)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
 

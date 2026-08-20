@@ -16,7 +16,10 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
+use App\Http\Controllers\RawLeadController;
+
 Route::apiResource('leads', LeadController::class);
+Route::apiResource('raw-leads', RawLeadController::class);
 Route::apiResource('students', StudentController::class);
 Route::delete('students/{student}/documents/{document}', [StudentController::class, 'deleteDocument']);
 Route::get('applications', [StudentController::class, 'applications']);
