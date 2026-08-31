@@ -20,6 +20,10 @@ export default function RawLeads() {
   
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [selectedLeads, setSelectedLeads] = useState(new Set());
+  const [movingLeadId, setMovingLeadId] = useState(null);
   
   const fileInputRef = useRef(null);
 
@@ -101,9 +105,46 @@ export default function RawLeads() {
       try {
         await axios.delete(`http://127.0.0.1:8000/api/raw-leads/${id}`);
         setLeads(leads.filter(l => l.id !== id));
+        const newSelected = new Set(selectedLeads);
+        if (newSelected.has(id)) {
+          newSelected.delete(id);
+          setSelectedLeads(newSelected);
+        }
       } catch (err) {
         console.error('Error deleting lead:', err);
         setErrorMsg('Failed to delete lead.');
+        setTimeout(() => setErrorMsg(''), 4000);
+      }
+    }
+  };
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedLeads(new Set(filteredLeads.map(l => l.id)));
+    } else {
+      setSelectedLeads(new Set());
+    }
+  };
+
+  const handleSelect = (id) => {
+    const newSelected = new Set(selectedLeads);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedLeads(newSelected);
+  };
+
+  const handleBulkDelete = async () => {
+    if (window.confirm(`Are you sure you want to delete ${selectedLeads.size} leads?`)) {
+      try {
+        await axios.post('http://127.0.0.1:8000/api/raw-leads/bulk-delete', { ids: Array.from(selectedLeads) });
+        setSelectedLeads(new Set());
+        await fetchLeads();
+      } catch (err) {
+        console.error('Error bulk deleting:', err);
+        setErrorMsg('Failed to delete selected leads.');
         setTimeout(() => setErrorMsg(''), 4000);
       }
     }
@@ -116,6 +157,8 @@ export default function RawLeads() {
     if (!leadToMove) return;
 
     try {
+      setMovingLeadId(leadId);
+      
       const statusMap = {
         'Hot Lead': 'hot',
         'Warm Lead': 'warm',
@@ -123,13 +166,21 @@ export default function RawLeads() {
         'Dead Lead': 'dead'
       };
       
+      const notesArray = leadToMove.notes ? [{
+        id: Date.now().toString(),
+        text: leadToMove.notes,
+        author: 'Admin',
+        time: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+      }] : [];
+      
       const payload = {
         name: leadToMove.name || 'Unknown',
         email: leadToMove.email || '',
         phone: leadToMove.phone || 'N/A',
         location: leadToMove.source || '',
         type: statusMap[newStatus] || 'cold',
-        status: 'New'
+        status: 'New',
+        notes: notesArray
       };
 
       await axios.post('http://127.0.0.1:8000/api/leads', payload);
@@ -144,6 +195,8 @@ export default function RawLeads() {
       console.error('Error moving lead to management:', err);
       setErrorMsg('Failed to move lead to Management. Is backend running?');
       setTimeout(() => setErrorMsg(''), 4000);
+    } finally {
+      setMovingLeadId(null);
     }
   };
 
@@ -158,12 +211,12 @@ export default function RawLeads() {
     }
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
+  const processFile = (file) => {
     if (!file) return;
 
     setErrorMsg('');
     setIsSuccess(false);
+    setIsImporting(true);
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
@@ -196,10 +249,10 @@ export default function RawLeads() {
           
           parsedLeads.push({
             id: Date.now() + i,
-            name: nameIdx !== -1 ? row[nameIdx] || '' : '',
-            email: emailIdx !== -1 ? row[emailIdx] || '' : '',
-            phone: phoneIdx !== -1 ? row[phoneIdx] || '' : '',
-            source: sourceIdx !== -1 ? row[sourceIdx] || 'Bulk Data' : 'Bulk Data',
+            name: nameIdx !== -1 && row[nameIdx] != null ? String(row[nameIdx]) : '',
+            email: emailIdx !== -1 && row[emailIdx] != null ? String(row[emailIdx]) : '',
+            phone: phoneIdx !== -1 && row[phoneIdx] != null ? String(row[phoneIdx]) : '',
+            source: sourceIdx !== -1 && row[sourceIdx] != null ? String(row[sourceIdx]) : 'Bulk Data',
             status: 'Select Lead',
             dateAdded: new Date().toLocaleDateString()
           });
@@ -229,9 +282,33 @@ export default function RawLeads() {
       } catch (err) {
         console.error(err);
         setErrorMsg('Error parsing Excel file. Please ensure it is a valid .xlsx or .xls file.');
+      } finally {
+        setIsImporting(false);
       }
     };
     reader.readAsBinaryString(file);
+  };
+
+  const handleFileUpload = (e) => {
+    processFile(e.target.files[0]);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFile(e.dataTransfer.files[0]);
+    }
   };
 
   const filteredLeads = leads.filter(lead => {
@@ -384,21 +461,34 @@ export default function RawLeads() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div 
                 style={{ 
-                  border: '2px dashed var(--border-color)', 
+                  border: isDragOver ? '2px dashed var(--primary-main)' : '2px dashed var(--border-color)', 
                   borderRadius: '12px', 
                   padding: '2.5rem 1.5rem', 
                   textAlign: 'center',
-                  backgroundColor: 'var(--bg-secondary)',
-                  cursor: 'pointer',
-                  transition: 'border-color 0.2s'
+                  backgroundColor: isDragOver ? 'rgba(59, 130, 246, 0.05)' : 'var(--bg-secondary)',
+                  cursor: isImporting ? 'default' : 'pointer',
+                  transition: 'all 0.2s'
                 }}
-                onClick={() => fileInputRef.current?.click()}
-                onMouseOver={(e) => e.currentTarget.style.borderColor = 'var(--primary-main)'}
-                onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                onClick={() => !isImporting && fileInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onMouseOver={(e) => { if(!isImporting && !isDragOver) e.currentTarget.style.borderColor = 'var(--primary-main)'; }}
+                onMouseOut={(e) => { if(!isImporting && !isDragOver) e.currentTarget.style.borderColor = 'var(--border-color)'; }}
               >
-                <FileText size={40} color="var(--primary-main)" style={{ margin: '0 auto 1rem', opacity: 0.8 }} />
-                <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.5rem' }}>Upload Excel File</h3>
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>Click to browse or drag and drop</p>
+                {isImporting ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                    <Loader2 size={40} className="spinner" style={{ color: 'var(--primary-main)' }} />
+                    <div>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.25rem' }}>Importing Leads...</h3>
+                      <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>Please wait while we process your file</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <FileText size={40} color="var(--primary-main)" style={{ margin: '0 auto 1rem', opacity: 0.8 }} />
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.5rem' }}>Upload Excel File</h3>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>Click to browse or drag and drop</p>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Supports .xlsx, .xls, .csv</p>
                 
                 <input 
@@ -407,7 +497,10 @@ export default function RawLeads() {
                   onChange={handleFileUpload} 
                   accept=".xlsx, .xls, .csv" 
                   style={{ display: 'none' }} 
+                  disabled={isImporting}
                 />
+                  </>
+                )}
               </div>
               
               <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', backgroundColor: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
@@ -425,6 +518,16 @@ export default function RawLeads() {
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', backgroundColor: 'white', padding: '0.1rem 0.4rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
                 {filteredLeads.length}
               </span>
+              {selectedLeads.size > 0 && (
+                <button 
+                  className="action-btn delete" 
+                  onClick={handleBulkDelete}
+                  title="Delete Selected"
+                  style={{ marginLeft: '1rem', padding: '0.2rem 0.5rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}
+                >
+                  <Trash2 size={14} /> Delete Selected ({selectedLeads.size})
+                </button>
+              )}
             </div>
             
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -465,6 +568,14 @@ export default function RawLeads() {
               <table className="data-table" style={{ width: '100%', margin: 0 }}>
                 <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-secondary)', zIndex: 1 }}>
                   <tr>
+                    <th style={{ width: '40px' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={filteredLeads.length > 0 && selectedLeads.size === filteredLeads.length}
+                        onChange={handleSelectAll}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </th>
                     <th>Name</th>
                     <th>Contact</th>
                     <th>Source</th>
@@ -476,7 +587,15 @@ export default function RawLeads() {
                 </thead>
                 <tbody>
                   {filteredLeads.map(lead => (
-                    <tr key={lead.id}>
+                    <tr key={lead.id} style={{ backgroundColor: selectedLeads.has(lead.id) ? 'rgba(59, 130, 246, 0.05)' : 'transparent' }}>
+                      <td>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedLeads.has(lead.id)}
+                          onChange={() => handleSelect(lead.id)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </td>
                       <td style={{ fontWeight: 500 }}>{lead.name || '-'}</td>
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -512,14 +631,18 @@ export default function RawLeads() {
                         />
                       </td>
                       <td>
-                        <select 
-                          value={lead.status || 'Select Lead'}
-                          onChange={(e) => handleStatusChange(lead.id, e.target.value)}
-                          style={{ fontSize: '0.75rem', padding: '0.25rem', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none' }}
-                        >
-                          <option value="Select Lead">Select Lead</option>
-                          {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <select 
+                            value={lead.status || 'Select Lead'}
+                            onChange={(e) => handleStatusChange(lead.id, e.target.value)}
+                            style={{ fontSize: '0.75rem', padding: '0.25rem', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none' }}
+                            disabled={movingLeadId === lead.id}
+                          >
+                            <option value="Select Lead">Select Status...</option>
+                            {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                          {movingLeadId === lead.id && <Loader2 size={14} className="spin" color="var(--primary-main)" />}
+                        </div>
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         <button onClick={() => handleEdit(lead)} style={{ background: 'none', border: 'none', color: 'var(--primary-main)', cursor: 'pointer', marginRight: '0.5rem' }}>

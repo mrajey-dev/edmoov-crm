@@ -19,6 +19,7 @@ Route::get('/user', function (Request $request) {
 use App\Http\Controllers\RawLeadController;
 
 Route::apiResource('leads', LeadController::class);
+Route::post('raw-leads/bulk-delete', [RawLeadController::class, 'bulkDestroy']);
 Route::apiResource('raw-leads', RawLeadController::class);
 Route::apiResource('students', StudentController::class);
 Route::delete('students/{student}/documents/{document}', [StudentController::class, 'deleteDocument']);

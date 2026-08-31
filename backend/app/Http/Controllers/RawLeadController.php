@@ -42,4 +42,16 @@ class RawLeadController extends Controller
         $rawLead->delete();
         return response()->json(null, 204);
     }
+
+    public function bulkDestroy(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'integer|exists:raw_leads,id'
+        ]);
+
+        RawLead::whereIn('id', $validated['ids'])->delete();
+        
+        return response()->json(['message' => 'Leads deleted successfully']);
+    }
 }

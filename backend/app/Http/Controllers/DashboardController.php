@@ -7,6 +7,7 @@ use App\Models\Student;
 use App\Models\Course;
 use App\Models\University;
 use App\Models\Lead;
+use App\Models\RawLead;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
@@ -18,6 +19,7 @@ class DashboardController extends Controller
         $totalCourses = Course::count();
         $totalUniversities = University::count();
         $totalLeads = Lead::count();
+        $totalRawLeads = RawLead::count();
         
         $activeApplications = Student::whereIn('status', ['Pending', 'Active'])->count();
         
@@ -49,6 +51,7 @@ class DashboardController extends Controller
             'applications' => $calculateGrowth(Student::class, function($q) { $q->whereIn('status', ['Pending', 'Active']); }),
             'courses' => $calculateGrowth(Course::class),
             'leads' => $calculateGrowth(Lead::class),
+            'raw_leads' => $calculateGrowth(RawLead::class),
         ];
 
         // 1. Lead Trend Data (Monthly over last 6 months)
@@ -230,6 +233,7 @@ class DashboardController extends Controller
             'partner_universities' => $totalUniversities,
             'courses_offered' => $totalCourses,
             'total_leads' => $totalLeads,
+            'total_raw_leads' => $totalRawLeads,
             'success_rate' => $successRate,
             'lead_trend_data' => $leadTrendData,
             'recent_leads' => $recentLeads,
@@ -241,6 +245,7 @@ class DashboardController extends Controller
                 'applications' => $generateSpark($activeApplications),
                 'students' => $generateSpark($totalStudents),
                 'leads' => $generateSpark($totalLeads),
+                'raw_leads' => $generateSpark($totalRawLeads),
             ],
             'growth' => $growth,
             'top_universities' => $topUniversitiesData,

@@ -64,7 +64,7 @@ function App() {
     switch (location.pathname) {
       case '/': return { subtitle: getGreeting(), title: 'Admin' };
       case '/raw-leads': return { subtitle: 'Overview', title: 'Raw Leads' };
-      case '/students': return { subtitle: 'Overview', title: 'Registered Students' };
+      case '/students': return { subtitle: 'Overview', title: 'Applicants' };
       case '/universities': return { subtitle: 'Overview', title: 'Universities' };
       case '/applications': return { subtitle: 'Overview', title: 'Approved Applications' };
       case '/courses': return { subtitle: 'Overview', title: 'Courses' };
@@ -117,7 +117,7 @@ function App() {
               <MessageSquare size={16} /> Lead Management
             </NavLink>
             <NavLink to="/students" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Users size={16} /> Students
+              <Users size={16} /> Applicants
             </NavLink>
             <NavLink to="/universities" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Briefcase size={16} /> Universities

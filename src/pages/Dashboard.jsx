@@ -14,7 +14,8 @@ import {
   ChevronDown,
   Loader2,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  UserCircle
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -47,6 +48,7 @@ export default function Dashboard() {
     partner_universities: 0,
     courses_offered: 0,
     total_leads: 0,
+    total_raw_leads: 0,
     success_rate: 0,
     total_revenue: 0,
     lead_trend_data: defaultLeadTrendData,
@@ -57,7 +59,8 @@ export default function Dashboard() {
       universities: defaultSparkData,
       applications: defaultSparkData,
       students: defaultSparkData,
-      leads: defaultSparkData
+      leads: defaultSparkData,
+      raw_leads: defaultSparkData
     }
   });
   const [isLoading, setIsLoading] = React.useState(true);
@@ -125,7 +128,7 @@ export default function Dashboard() {
               <BookOpen size={24} strokeWidth={2} />
             </div>
           </div>
-          <div className="stat-card-title">Total Students</div>
+          <div className="stat-card-title">Total Applicants</div>
           <div className="stat-card-body">
             <div className="stat-value">
               {isLoading ? <Loader2 className="spinner" size={32} /> : stats.total_students}
@@ -136,20 +139,20 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Card 2: White (Applications) */}
-        <div className="stat-card-modern" onClick={() => navigate('/applications')} style={{ cursor: 'pointer' }}>
+        {/* Card 2: White (Raw Leads) */}
+        <div className="stat-card-modern" onClick={() => navigate('/raw-leads')} style={{ cursor: 'pointer' }}>
           <div className="stat-card-header">
             <div className="stat-icon-box">
-              <Users size={24} strokeWidth={2} />
+              <UserCircle size={24} strokeWidth={2} />
             </div>
           </div>
-          <div className="stat-card-title">Approved Applications</div>
+          <div className="stat-card-title">Raw Leads</div>
           <div className="stat-card-body">
             <div className="stat-value">
-              {isLoading ? <Loader2 className="spinner" size={32} /> : stats.active_applications}
+              {isLoading ? <Loader2 className="spinner" size={32} /> : stats.total_raw_leads}
             </div>
             <div className="stat-subtitle" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              {renderGrowth(stats.growth?.applications)} <span style={{ color: 'var(--text-muted)' }}>vs Last Month</span>
+              {renderGrowth(stats.growth?.raw_leads)} <span style={{ color: 'var(--text-muted)' }}>vs Last Month</span>
             </div>
           </div>
         </div>

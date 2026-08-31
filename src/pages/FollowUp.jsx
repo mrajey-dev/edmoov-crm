@@ -17,8 +17,9 @@ import {
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { MoreHorizontal, Calendar, BookOpen, X, MessageSquare, Plus, Edit2, Trash2, Check } from 'lucide-react';
+import { MoreHorizontal, Calendar, BookOpen, X, MessageSquare, Plus, Edit2, Trash2, Check, GraduationCap, Loader2 } from 'lucide-react';
 import axios from 'axios';
+import StudentFormModal from '../components/StudentFormModal';
 
 const API_URL = 'http://127.0.0.1:8000/api/leads';
 
@@ -59,8 +60,24 @@ function SortableItem({ item, onClick }) {
       }}
       className={`kanban-card ${isDragging ? 'is-dragging' : ''}`}
     >
-      <div className="lead-header">
-        <span className="lead-name">{item.name}</span>
+      <div className="lead-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span className="lead-name" style={{ flex: 1 }}>{item.name}</span>
+        {item.column === 'approved' && (
+          <button 
+             className="primary-btn" 
+             onClick={(e) => { 
+                e.stopPropagation(); 
+                if (item.student) {
+                    window.location.href = `/students?search=${encodeURIComponent(item.email || item.name)}`; 
+                } else {
+                    onClick(item);
+                }
+             }} 
+             style={{ fontSize: '0.65rem', padding: '0.25rem 0.5rem', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '4px', background: item.student ? '#3b82f6' : '#f59e0b', color: 'white' }}
+          >
+             {item.student ? 'View Profile' : 'Add Details'}
+          </button>
+        )}
         <span className="lead-meta"><MoreHorizontal size={14}/></span>
       </div>
       <div className="lead-program">
@@ -142,6 +159,9 @@ export default function FollowUp() {
   const [isSubmittingNote, setIsSubmittingNote] = useState(false);
   const [deletingNoteId, setDeletingNoteId] = useState(null);
   const [savingNoteId, setSavingNoteId] = useState(null);
+  
+  const [convertingLead, setConvertingLead] = useState(null);
+  const [dragOriginalColumn, setDragOriginalColumn] = useState(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -156,6 +176,8 @@ export default function FollowUp() {
 
   const handleDragStart = (event) => {
     setActiveId(event.active.id);
+    const item = items.find(i => i.id === event.active.id);
+    if (item) setDragOriginalColumn(item.column);
   };
 
   const handleDragOver = (event) => {
@@ -222,6 +244,13 @@ export default function FollowUp() {
     });
 
     if (newColumn && activeId) {
+      if (newColumn === 'approved') {
+        const lead = items.find(i => i.id === activeId);
+        if (lead && !lead.student) {
+            setConvertingLead(lead);
+            return;
+        }
+      }
       try {
         await axios.put(`${API_URL}/${activeId}`, { type: newColumn });
       } catch (err) {
@@ -231,6 +260,39 @@ export default function FollowUp() {
   };
 
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
+
+  const handleCancelConvert = () => {
+    if (!convertingLead) return;
+    setItems((prevItems) => prevItems.map(item => 
+      item.id === convertingLead.id ? { ...item, column: dragOriginalColumn, type: dragOriginalColumn } : item
+    ));
+    setConvertingLead(null);
+  };
+
+  const handleAddLater = async () => {
+    if (!convertingLead) return;
+    try {
+      await axios.put(`${API_URL}/${convertingLead.id}`, { type: 'approved' });
+      setItems((prevItems) => prevItems.map(item => 
+        item.id === convertingLead.id ? { ...item, column: 'approved', type: 'approved' } : item
+      ));
+    } catch (err) {
+      console.error('Failed to update lead status:', err);
+    }
+    setConvertingLead(null);
+  };
+
+  const handleConvertSuccess = async (studentData) => {
+    try {
+       await axios.put(`${API_URL}/${convertingLead.id}`, { type: 'approved' });
+       setItems((prevItems) => prevItems.map(item => 
+          item.id === convertingLead.id ? { ...item, type: 'approved', column: 'approved', student: studentData } : item
+       ));
+       setConvertingLead(null);
+    } catch (err) {
+       console.error("Failed to convert lead to student", err);
+    }
+  };
 
   const handleCardClick = (item) => {
     setSelectedLead(item);
@@ -309,6 +371,19 @@ export default function FollowUp() {
       console.error(err);
     } finally {
       setDeletingNoteId(null);
+    }
+  };
+
+  const handleDeleteLead = async (id) => {
+    if (window.confirm('Are you sure you want to completely delete this lead record?')) {
+      try {
+        await axios.delete(`${API_URL}/${id}`);
+        setItems(items.filter(item => item.id !== id));
+        setSelectedLead(null);
+      } catch (err) {
+        console.error('Failed to delete lead:', err);
+        alert('Failed to delete lead.');
+      }
     }
   };
 
@@ -448,6 +523,21 @@ export default function FollowUp() {
                 </div>
               </div>
 
+              {!selectedLead.student && selectedLead.column === 'approved' && (
+                <div style={{ marginTop: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+                  <button 
+                    className="primary-btn" 
+                    onClick={() => {
+                       setConvertingLead(selectedLead);
+                       setSelectedLead(null);
+                    }}
+                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 2rem', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
+                  >
+                    <GraduationCap size={18} /> Complete Student Details
+                  </button>
+                </div>
+              )}
+
               {selectedLead.student && (
                 <div style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#f8fafc', marginBottom: '1.5rem' }}>
                   <h4 style={{ margin: '0 0 1rem 0', fontSize: '1rem', color: 'var(--primary-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -550,9 +640,32 @@ export default function FollowUp() {
                   {isSubmittingNote ? <><Loader2 className="spin" size={16} /> Posting...</> : <><MessageSquare size={16} /> Post Note</>}
                 </button>
               </form>
+
+              {/* Delete Lead Button */}
+              <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end' }}>
+                <button 
+                  type="button"
+                  onClick={() => handleDeleteLead(selectedLead.id)} 
+                  style={{ padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', transition: 'background 0.2s' }}
+                  onMouseOver={(e) => e.currentTarget.style.background = '#fca5a5'}
+                  onMouseOut={(e) => e.currentTarget.style.background = '#fee2e2'}
+                >
+                  <Trash2 size={16} /> Delete Lead Record
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Convert to Applicant Modal */}
+      {convertingLead && (
+        <StudentFormModal 
+          student={convertingLead} 
+          onClose={handleCancelConvert} 
+          onSuccess={handleConvertSuccess}
+          onAddLater={handleAddLater}
+        />
       )}
     </div>
   );
