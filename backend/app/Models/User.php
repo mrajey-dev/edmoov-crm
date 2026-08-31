@@ -50,4 +50,24 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'super_admin';
+    }
+
+    public function students()
+    {
+        return $this->hasMany(Student::class);
+    }
+
+    public function leads()
+    {
+        return $this->hasMany(Lead::class);
+    }
+
+    public function rawLeads()
+    {
+        return $this->hasMany(RawLead::class);
+    }
 }

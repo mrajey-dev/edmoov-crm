@@ -3,10 +3,15 @@ import { useLocation } from 'react-router-dom';
 import { Plus, Edit2, Trash2, X, User, Search, Loader2, Mail, Phone, MapPin, Activity, FileText, Download, GraduationCap } from 'lucide-react';
 import axios from 'axios';
 import StudentFormModal from '../components/StudentFormModal';
+import AdminFilterBar from '../components/AdminFilterBar';
 
 const BASE_API_URL = 'http://127.0.0.1:8000/api';
 
 export default function Students({ isApplicationsPage = false }) {
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const [selectedAdminId, setSelectedAdminId] = useState(null);
+
   const API_URL = isApplicationsPage ? `${BASE_API_URL}/applications` : `${BASE_API_URL}/students`;
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -28,12 +33,16 @@ export default function Students({ isApplicationsPage = false }) {
 
   useEffect(() => {
     fetchStudents();
-  }, [location.search]);
+  }, [location.search, selectedAdminId]);
 
   const fetchStudents = async () => {
     setIsLoading(true);
     try {
-      const res = await axios.get(API_URL);
+      let url = API_URL;
+      if (selectedAdminId) {
+        url += url.includes('?') ? `&user_id=${selectedAdminId}` : `?user_id=${selectedAdminId}`;
+      }
+      const res = await axios.get(url);
       setStudents(res.data);
     } catch (error) {
       console.error("Error fetching students:", error);
@@ -205,7 +214,14 @@ export default function Students({ isApplicationsPage = false }) {
   const availableQualifications = [...new Set(students.map(s => s.highest_qualification).filter(Boolean))].sort();
 
   return (
-    <div className="card" style={{ minHeight: '600px' }}>
+    <div>
+      {isSuperAdmin && (
+        <AdminFilterBar
+          selectedAdminId={selectedAdminId}
+          onChange={setSelectedAdminId}
+        />
+      )}
+      <div className="card" style={{ minHeight: '600px' }}>
       <div className="card-header" style={{ justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
           <div className="search-container" style={{ minWidth: '200px' }}>
@@ -299,6 +315,7 @@ export default function Students({ isApplicationsPage = false }) {
               <th>Parents Occ.</th>
               <th>Fam. Income</th>
               <th>Fin. Source</th>
+              {isSuperAdmin && <th>Owner</th>}
               <th style={{ textAlign: 'right', position: 'sticky', right: 0, background: 'white', zIndex: 1 }}>Actions</th>
             </tr>
           </thead>
@@ -345,6 +362,13 @@ export default function Students({ isApplicationsPage = false }) {
                 <td>{student.parents_occupation || '-'}</td>
                 <td>{student.family_annual_income || '-'}</td>
                 <td>{student.finance_source || '-'}</td>
+                {isSuperAdmin && (
+                  <td>
+                    <span style={{ fontSize: '0.75rem', color: '#4f46e5', background: '#eef2ff', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                      @{student.user?.username || 'admin'}
+                    </span>
+                  </td>
+                )}
                 <td style={{ textAlign: 'right', position: 'sticky', right: 0, background: 'white', zIndex: 1, boxShadow: '-2px 0 5px rgba(0,0,0,0.05)' }}>
                   <button className="action-btn" title="Update University Status" onClick={() => setStatusModalStudent(student)}>
                     <GraduationCap size={16} />
@@ -750,5 +774,6 @@ export default function Students({ isApplicationsPage = false }) {
         </div>
       )}
     </div>
+  </div>
   );
 }

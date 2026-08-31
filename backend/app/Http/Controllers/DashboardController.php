@@ -13,19 +13,36 @@ use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
-    public function getStats()
+    public function getStats(Request $request)
     {
-        $totalStudents = Student::count();
+        $user = $request->user();
+        $targetUserId = null;
+        if ($user) {
+            if (!$user->isSuperAdmin()) {
+                $targetUserId = $user->id;
+            } elseif ($request->filled('user_id')) {
+                $targetUserId = $request->user_id;
+            }
+        }
+
+        $applyUserScope = function ($query) use ($targetUserId) {
+            if ($targetUserId) {
+                $query->where('user_id', $targetUserId);
+            }
+            return $query;
+        };
+
+        $totalStudents = $applyUserScope(Student::query())->count();
         $totalCourses = Course::count();
         $totalUniversities = University::count();
-        $totalLeads = Lead::count();
-        $totalRawLeads = RawLead::count();
-        
-        $activeApplications = Student::whereIn('status', ['Pending', 'Active'])->count();
-        
-        $successRate = 94; // Still mocked as success rate requires deeper schema
+        $totalLeads = $applyUserScope(Lead::query())->count();
+        $totalRawLeads = $applyUserScope(RawLead::query())->count();
 
-        $calculateGrowth = function($modelClass, $condition = null) {
+        $activeApplications = $applyUserScope(Student::whereIn('status', ['Pending', 'Active']))->count();
+
+        $successRate = 94;
+
+        $calculateGrowth = function ($modelClass, $condition = null) use ($targetUserId) {
             $now = Carbon::now();
             $currentMonthStart = $now->copy()->startOfMonth();
             $lastMonthStart = $now->copy()->subMonth()->startOfMonth();
@@ -33,6 +50,11 @@ class DashboardController extends Controller
 
             $queryCurrent = $modelClass::where('created_at', '>=', $currentMonthStart);
             $queryLast = $modelClass::whereBetween('created_at', [$lastMonthStart, $lastMonthEnd]);
+
+            if ($targetUserId && in_array($modelClass, [Student::class, Lead::class, RawLead::class])) {
+                $queryCurrent->where('user_id', $targetUserId);
+                $queryLast->where('user_id', $targetUserId);
+            }
 
             if ($condition) {
                 $condition($queryCurrent);
@@ -48,7 +70,7 @@ class DashboardController extends Controller
 
         $growth = [
             'students' => $calculateGrowth(Student::class),
-            'applications' => $calculateGrowth(Student::class, function($q) { $q->whereIn('status', ['Pending', 'Active']); }),
+            'applications' => $calculateGrowth(Student::class, function ($q) { $q->whereIn('status', ['Pending', 'Active']); }),
             'courses' => $calculateGrowth(Course::class),
             'leads' => $calculateGrowth(Lead::class),
             'raw_leads' => $calculateGrowth(RawLead::class),
@@ -56,50 +78,59 @@ class DashboardController extends Controller
 
         // 1. Lead Trend Data (Monthly over last 6 months)
         $sixMonthsAgo = Carbon::now()->subMonths(5)->startOfMonth();
-        $monthlyLeads = Lead::select(
-                DB::raw('MONTH(created_at) as month'),
-                DB::raw('count(*) as count')
-            )
-            ->where('created_at', '>=', $sixMonthsAgo)
+        $monthlyLeadsQuery = Lead::select(
+            DB::raw('MONTH(created_at) as month'),
+            DB::raw('count(*) as count')
+        )->where('created_at', '>=', $sixMonthsAgo);
+
+        if ($targetUserId) {
+            $monthlyLeadsQuery->where('user_id', $targetUserId);
+        }
+
+        $monthlyLeads = $monthlyLeadsQuery
             ->groupBy('month')
             ->orderBy('month')
             ->get()
             ->keyBy('month');
-            
+
         $leadTrendData = [];
         for ($i = 0; $i < 6; $i++) {
             $date = Carbon::now()->subMonths(5 - $i);
-            $monthNum = $date->format('n'); // Integer month without leading zero to match MySQL MONTH()
+            $monthNum = $date->format('n');
             $leadTrendData[] = [
                 'name' => $date->format('M'),
                 'leads' => (int) ($monthlyLeads->get($monthNum)->count ?? 0)
             ];
         }
 
-
-
-        // 3. Spark Data (Random historical weekly mock based on totals, just to show trends without needing weekly granularity on tiny seed sets)
-        // Note: For a production app, we would query DB::raw('WEEK(created_at)'), but SQLite (used in dev) makes date math tricky, so we'll generate dynamic sparks that sum to the total.
-        $generateSpark = function($total) {
-            $base = max(1, (int)($total / 7));
+        // 3. Spark Data
+        $generateSpark = function ($total) {
+            $base = max(1, (int) ($total / 7));
             return [
                 ['v' => $base + rand(-$base, $base)],
                 ['v' => $base + rand(-$base, $base)],
                 ['v' => $base + rand(-$base, $base)],
                 ['v' => $base + rand(-$base, $base)],
                 ['v' => $base + rand(-$base, $base)],
-                ['v' => $base * 1.5 + rand(0, $base)], // Slight upward trend
+                ['v' => (int) ($base * 1.5 + rand(0, $base))],
                 ['v' => $base * 2 + rand(0, $base)]
             ];
         };
 
         // 4. Recent Leads
-        $recentLeads = Lead::orderBy('created_at', 'desc')->take(6)->get(['id', 'name', 'type', 'created_at']);
+        $recentLeadsQuery = Lead::with('user:id,name,username')->orderBy('created_at', 'desc');
+        if ($targetUserId) {
+            $recentLeadsQuery->where('user_id', $targetUserId);
+        }
+        $recentLeads = $recentLeadsQuery->take(6)->get(['id', 'user_id', 'name', 'type', 'created_at']);
 
         // 5. Revenue Model
-        // We match Leads -> Students (by email) -> Course (by preferred_course)
-        $studentsWithCourses = Student::all();
-        $allLeadsByEmail = Lead::all()->keyBy('email');
+        $studentsWithCourses = $applyUserScope(Student::query())->get();
+        $leadsQuery = Lead::query();
+        if ($targetUserId) {
+            $leadsQuery->where('user_id', $targetUserId);
+        }
+        $allLeadsByEmail = $leadsQuery->get()->keyBy('email');
         $allCoursesByName = Course::all()->keyBy('name');
 
         $totalRevenue = 0;
@@ -114,11 +145,10 @@ class DashboardController extends Controller
         foreach ($studentsWithCourses as $student) {
             $lead = $allLeadsByEmail->get($student->email);
             if (!$lead) continue;
-            
+
             $courseName = $student->preferred_course ?: $student->program;
             $course = $allCoursesByName->get($courseName);
 
-            // Fallback to partial match if exact match fails
             if (!$course && $courseName) {
                 $course = $allCoursesByName->first(function ($c) use ($courseName) {
                     return stripos($courseName, $c->name) !== false || stripos($c->name, $courseName) !== false;
@@ -127,7 +157,6 @@ class DashboardController extends Controller
 
             if (!$course) continue;
 
-            // Strip non-numeric characters to parse fee
             $feeStr = preg_replace('/[^0-9]/', '', $course->fee);
             $feeAmount = (int) $feeStr;
 
@@ -152,8 +181,13 @@ class DashboardController extends Controller
         }
 
         // 2. Lead Distribution (Pie Chart)
-        $leadCounts = Lead::select('type', DB::raw('count(*) as count'))->groupBy('type')->get();
-        $leadDistribution = $leadCounts->map(function($l) use ($colors, $revenueByLeadTypeData) {
+        $leadCountsQuery = Lead::select('type', DB::raw('count(*) as count'));
+        if ($targetUserId) {
+            $leadCountsQuery->where('user_id', $targetUserId);
+        }
+        $leadCounts = $leadCountsQuery->groupBy('type')->get();
+
+        $leadDistribution = $leadCounts->map(function ($l) use ($colors, $revenueByLeadTypeData) {
             return [
                 'name' => ucfirst($l->type) . ' Leads',
                 'value' => $l->count,
@@ -163,13 +197,17 @@ class DashboardController extends Controller
         });
 
         // 6. Top Universities
-        $topUniversities = Student::whereNotNull('preferred_college')
-            ->select('preferred_college as name', DB::raw('count(*) as count'))
+        $topUniversitiesQuery = Student::whereNotNull('preferred_college')
+            ->select('preferred_college as name', DB::raw('count(*) as count'));
+        if ($targetUserId) {
+            $topUniversitiesQuery->where('user_id', $targetUserId);
+        }
+        $topUniversities = $topUniversitiesQuery
             ->groupBy('preferred_college')
             ->orderByDesc('count')
             ->take(5)
             ->get();
-        
+
         $topUniversitiesData = [];
         $allUniversitiesByName = University::all()->keyBy('name');
         foreach ($topUniversities as $tu) {
@@ -179,29 +217,25 @@ class DashboardController extends Controller
                     return stripos($tu->name, $u->name) !== false || stripos($u->name, $tu->name) !== false;
                 });
             }
-            if ($uni) {
-                $topUniversitiesData[] = [
-                    'name' => $uni->name,
-                    'country' => $uni->country ?? 'Unknown',
-                    'count' => $tu->count,
-                ];
-            } else {
-                $topUniversitiesData[] = [
-                    'name' => $tu->name,
-                    'country' => 'Unknown',
-                    'count' => $tu->count,
-                ];
-            }
+            $topUniversitiesData[] = [
+                'name' => $uni ? $uni->name : $tu->name,
+                'country' => $uni->country ?? 'Unknown',
+                'count' => $tu->count,
+            ];
         }
 
         // 7. Top Courses
-        $topCourses = Student::whereNotNull('preferred_course')
-            ->select('preferred_course as name', DB::raw('count(*) as count'))
+        $topCoursesQuery = Student::whereNotNull('preferred_course')
+            ->select('preferred_course as name', DB::raw('count(*) as count'));
+        if ($targetUserId) {
+            $topCoursesQuery->where('user_id', $targetUserId);
+        }
+        $topCourses = $topCoursesQuery
             ->groupBy('preferred_course')
             ->orderByDesc('count')
             ->take(5)
             ->get();
-            
+
         $topCoursesData = [];
         foreach ($topCourses as $tc) {
             $course = $allCoursesByName->get($tc->name);
@@ -210,21 +244,12 @@ class DashboardController extends Controller
                     return stripos($tc->name, $c->name) !== false || stripos($c->name, $tc->name) !== false;
                 });
             }
-            if ($course) {
-                $topCoursesData[] = [
-                    'name' => $course->name,
-                    'university' => $course->university ?? 'Unknown',
-                    'fee' => $course->fee ?? '0',
-                    'count' => $tc->count,
-                ];
-            } else {
-                $topCoursesData[] = [
-                    'name' => $tc->name,
-                    'university' => 'Unknown',
-                    'fee' => '0',
-                    'count' => $tc->count,
-                ];
-            }
+            $topCoursesData[] = [
+                'name' => $course ? $course->name : $tc->name,
+                'university' => $course->university ?? 'Unknown',
+                'fee' => $course->fee ?? '0',
+                'count' => $tc->count,
+            ];
         }
 
         return response()->json([
@@ -255,9 +280,19 @@ class DashboardController extends Controller
 
     public function getEnrollments(Request $request)
     {
+        $user = $request->user();
+        $targetUserId = null;
+        if ($user) {
+            if (!$user->isSuperAdmin()) {
+                $targetUserId = $user->id;
+            } elseif ($request->filled('user_id')) {
+                $targetUserId = $request->user_id;
+            }
+        }
+
         $period = $request->query('period', '1m');
         $now = Carbon::now();
-        
+
         switch ($period) {
             case '1y':
                 $startDate = $now->copy()->startOfMonth()->subMonths(11);
@@ -278,14 +313,17 @@ class DashboardController extends Controller
                 break;
         }
 
-        $students = Student::all();
+        $studentsQuery = Student::query();
+        if ($targetUserId) {
+            $studentsQuery->where('user_id', $targetUserId);
+        }
+        $students = $studentsQuery->get();
 
         $currentEnrollments = 0;
         $previousEnrollments = 0;
         $currentBuckets = [];
         $previousBuckets = [];
 
-        // Initialize buckets
         if ($period === '1m') {
             for ($i = 0; $i <= 29; $i++) {
                 $d = $startDate->copy()->addDays($i)->format('d M');
@@ -307,7 +345,6 @@ class DashboardController extends Controller
             $val = 1;
             $createdAt = Carbon::parse($student->created_at);
 
-            // Current Period
             if ($createdAt >= $startDate && $createdAt <= $now) {
                 $currentEnrollments += $val;
                 if ($period === '1m') {
@@ -319,11 +356,9 @@ class DashboardController extends Controller
                 }
             }
 
-            // Previous Period
             if ($createdAt >= $prevStartDate && $createdAt < $startDate) {
                 $previousEnrollments += $val;
                 if ($period === '1m') {
-                    // Match to corresponding day index
                     $diffDays = $createdAt->diffInDays($prevStartDate);
                     $key = $prevStartDate->copy()->addDays($diffDays)->format('d M');
                     if (isset($previousBuckets[$key])) $previousBuckets[$key] += $val;
@@ -347,7 +382,7 @@ class DashboardController extends Controller
 
         for ($i = 0; $i < count($currentKeys); $i++) {
             $chartData[] = [
-                'name' => $period === '1m' ? $currentKeys[$i] : explode(' ', $currentKeys[$i])[0], // M Y -> M for shorter labels
+                'name' => $period === '1m' ? $currentKeys[$i] : explode(' ', $currentKeys[$i])[0],
                 'enrollments' => $currentBuckets[$currentKeys[$i]],
                 'previous_enrollments' => isset($previousKeys[$i]) ? $previousBuckets[$previousKeys[$i]] : 0
             ];

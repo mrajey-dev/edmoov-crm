@@ -15,7 +15,8 @@ import {
   LogOut,
   Key,
   User as UserIcon,
-  ChevronDown
+  ChevronDown,
+  ShieldCheck
 } from 'lucide-react';
 
 import Dashboard from './pages/Dashboard';
@@ -28,6 +29,7 @@ import Services from './pages/Services';
 import Login from './pages/Login';
 import Profile from './pages/Profile';
 import PasswordReset from './pages/PasswordReset';
+import AdminManagement from './pages/AdminManagement';
 import { downloadPageAsPDF } from './utils/pdfExport';
 import axios from 'axios';
 
@@ -48,10 +50,21 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('edmoov_admin_auth') === 'true';
   });
+
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || 'null');
+    } catch {
+      return null;
+    }
+  });
+
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -62,7 +75,7 @@ function App() {
 
   const getPageTitle = () => {
     switch (location.pathname) {
-      case '/': return { subtitle: getGreeting(), title: 'Admin' };
+      case '/': return { subtitle: getGreeting(), title: currentUser?.name || (isSuperAdmin ? 'Super Admin' : 'Admin') };
       case '/raw-leads': return { subtitle: 'Overview', title: 'Raw Leads' };
       case '/students': return { subtitle: 'Overview', title: 'Applicants' };
       case '/universities': return { subtitle: 'Overview', title: 'Universities' };
@@ -72,14 +85,16 @@ function App() {
       case '/services': return { subtitle: 'Overview', title: 'Services' };
       case '/profile': return { subtitle: 'Account', title: 'My Profile' };
       case '/password-reset': return { subtitle: 'Security', title: 'Password Reset' };
+      case '/admins': return { subtitle: 'System Control', title: 'Admin Management' };
       default: return { subtitle: 'Overview', title: 'Dashboard' };
     }
   };
 
   const pageTitle = getPageTitle();
 
-  const handleLogin = () => {
+  const handleLogin = (user) => {
     localStorage.setItem('edmoov_admin_auth', 'true');
+    setCurrentUser(user);
     setIsAuthenticated(true);
   };
 
@@ -144,8 +159,23 @@ function App() {
                 style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
               >
                 <UserCircle size={36} color="white" style={{ opacity: 0.8 }} />
-                <div className="user-info" style={{ marginLeft: '0.5rem' }}>
-                  <span className="user-name" style={{ color: 'white', fontWeight: 600 }}>Admin</span>
+                <div className="user-info" style={{ marginLeft: '0.5rem', display: 'flex', alignItems: 'center' }}>
+                  <span className="user-name" style={{ color: 'white', fontWeight: 600 }}>
+                    {currentUser?.name || 'Admin'}
+                  </span>
+                  <span style={{
+                    fontSize: '0.68rem',
+                    padding: '2px 7px',
+                    borderRadius: '999px',
+                    background: isSuperAdmin ? '#f59e0b' : '#3b82f6',
+                    color: 'white',
+                    fontWeight: 700,
+                    marginLeft: '6px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    {isSuperAdmin ? 'Super Admin' : 'Admin'}
+                  </span>
                 </div>
                 <ChevronDown size={16} color="white" style={{ marginLeft: '0.5rem', opacity: 0.7 }} />
               </div>
@@ -158,6 +188,22 @@ function App() {
                     style={{ position: 'fixed', inset: 0, zIndex: 99 }}
                   />
                   <div className="profile-dropdown slideUp fadeIn">
+                    <div style={{ padding: '0.65rem 1rem', borderBottom: '1px solid #f1f5f9' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>
+                        {currentUser?.name || 'Admin'}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        @{currentUser?.username || 'admin'} • {isSuperAdmin ? 'Super Admin' : 'Regular Admin'}
+                      </div>
+                    </div>
+                    {isSuperAdmin && (
+                      <button
+                        className="dropdown-item"
+                        onClick={() => { setIsProfileOpen(false); navigate('/admins'); }}
+                      >
+                        <ShieldCheck size={16} /> Admins
+                      </button>
+                    )}
                     <button
                       className="dropdown-item"
                       onClick={() => { setIsProfileOpen(false); navigate('/profile'); }}
@@ -184,6 +230,7 @@ function App() {
                         localStorage.removeItem('auth_token');
                         localStorage.removeItem('user');
                         delete axios.defaults.headers.common['Authorization'];
+                        setCurrentUser(null);
                         setIsAuthenticated(false);
                       }}
                     >
@@ -231,6 +278,7 @@ function App() {
             <Route path="/services" element={<Services />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/password-reset" element={<PasswordReset />} />
+            <Route path="/admins" element={isSuperAdmin ? <AdminManagement /> : <Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>

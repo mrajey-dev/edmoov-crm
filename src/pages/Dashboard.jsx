@@ -21,6 +21,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
+import AdminFilterBar from '../components/AdminFilterBar';
 
 const API_URL = 'http://127.0.0.1:8000/api/dashboard/stats';
 
@@ -42,6 +43,10 @@ const defaultLeadDistribution = [
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const [selectedAdminId, setSelectedAdminId] = React.useState(null);
+
   const [stats, setStats] = React.useState({
     total_students: 0,
     active_applications: 0,
@@ -79,7 +84,9 @@ export default function Dashboard() {
   React.useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await axios.get(API_URL);
+        setIsLoading(true);
+        const url = selectedAdminId ? `${API_URL}?user_id=${selectedAdminId}` : API_URL;
+        const response = await axios.get(url);
         setStats(response.data);
       } catch (error) {
         console.error('Failed to fetch dashboard stats:', error);
@@ -88,13 +95,15 @@ export default function Dashboard() {
       }
     };
     fetchStats();
-  }, []);
+  }, [selectedAdminId]);
 
   React.useEffect(() => {
     const fetchEnrollments = async () => {
       setIsEnrollmentLoading(true);
       try {
-        const response = await axios.get(`http://127.0.0.1:8000/api/dashboard/enrollments?period=${enrollmentPeriod}`);
+        let url = `http://127.0.0.1:8000/api/dashboard/enrollments?period=${enrollmentPeriod}`;
+        if (selectedAdminId) url += `&user_id=${selectedAdminId}`;
+        const response = await axios.get(url);
         setEnrollmentData(response.data);
       } catch (error) {
         console.error('Failed to fetch enrollment data:', error);
@@ -103,7 +112,7 @@ export default function Dashboard() {
       }
     };
     fetchEnrollments();
-  }, [enrollmentPeriod]);
+  }, [enrollmentPeriod, selectedAdminId]);
 
   const renderGrowth = (value) => {
     if (value === undefined || value === null) return <Loader2 size={12} className="spinner" />;
@@ -119,6 +128,13 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-wrapper">
+      {isSuperAdmin && (
+        <AdminFilterBar
+          selectedAdminId={selectedAdminId}
+          onChange={setSelectedAdminId}
+        />
+      )}
+
       {/* Stats Row */}
       <div className="stats-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         {/* Card 1: Dark Green (Students) */}

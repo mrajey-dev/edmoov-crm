@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { Lock, User, ArrowRight, Eye, EyeOff, GraduationCap } from 'lucide-react';
+import { Lock, User, ArrowRight, Eye, EyeOff, GraduationCap, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
 import axios from 'axios';
 
 export default function Login({ onLogin }) {
@@ -27,9 +26,12 @@ export default function Login({ onLogin }) {
       if (data.access_token) {
         localStorage.setItem('auth_token', data.access_token);
         localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('edmoov_admin_auth', 'true');
         // Set default header for future requests
         axios.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
-        onLogin();
+        if (onLogin) {
+          onLogin(data.user);
+        }
         navigate('/');
       }
     } catch (err) {
@@ -71,8 +73,23 @@ export default function Login({ onLogin }) {
         <div className="login-right-panel">
           <div className="login-form-wrapper">
             <div className="login-header">
-              <h2>Admin Portal</h2>
-              <p>Please sign in to access your dashboard</p>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                background: '#fff7ed',
+                border: '1px solid #ffedd5',
+                color: '#c2410c',
+                padding: '0.35rem 0.85rem',
+                borderRadius: '999px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                marginBottom: '0.85rem'
+              }}>
+                <ShieldCheck size={14} /> Super Admin & Admin Portal
+              </div>
+              <h2>Welcome Back</h2>
+              <p>Sign in to access your CRM dashboard</p>
             </div>
 
             <form onSubmit={handleLogin} className="login-form">
@@ -82,10 +99,11 @@ export default function Login({ onLogin }) {
                   <User className="input-icon" size={18} />
                   <input
                     type="text"
-                    placeholder="Enter username"
+                    placeholder="Enter username (e.g. admin)"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    autoComplete="off"
+                    autoComplete="username"
+                    required
                   />
                 </div>
               </div>
@@ -99,6 +117,8 @@ export default function Login({ onLogin }) {
                     placeholder="Enter password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
                   />
                   <button
                     type="button"

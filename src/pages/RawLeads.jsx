@@ -2,8 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Plus, FileText, User, Users, Mail, Phone, Tag, Save, X, CheckCircle, AlertCircle, Edit2, Trash2, Activity, Loader2, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
+import AdminFilterBar from '../components/AdminFilterBar';
 
 export default function RawLeads() {
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const [selectedAdminId, setSelectedAdminId] = useState(null);
+
   const [activeTab, setActiveTab] = useState('manual'); // 'manual' or 'import'
   const [leads, setLeads] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,13 +49,13 @@ export default function RawLeads() {
 
   useEffect(() => {
     fetchLeads();
-  }, []);
+  }, [selectedAdminId]);
 
   const fetchLeads = async () => {
     try {
       setIsLoading(true);
-      const res = await axios.get('http://127.0.0.1:8000/api/raw-leads');
-      // Reverse array to show newest first, assuming backend doesn't sort
+      const url = selectedAdminId ? `http://127.0.0.1:8000/api/raw-leads?user_id=${selectedAdminId}` : 'http://127.0.0.1:8000/api/raw-leads';
+      const res = await axios.get(url);
       setLeads(Array.isArray(res.data) ? res.data.reverse() : []);
     } catch (err) {
       console.error('Error fetching raw leads:', err);
@@ -320,7 +325,14 @@ export default function RawLeads() {
   });
 
   return (
-    <div className="card" style={{ minHeight: '600px' }}>
+    <div>
+      {isSuperAdmin && (
+        <AdminFilterBar
+          selectedAdminId={selectedAdminId}
+          onChange={setSelectedAdminId}
+        />
+      )}
+      <div className="card" style={{ minHeight: '600px' }}>
       <div className="card-header" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>Add Raw Leads</h2>
       </div>
@@ -582,6 +594,7 @@ export default function RawLeads() {
                     <th>Date</th>
                     <th>Notes</th>
                     <th>Status</th>
+                    {isSuperAdmin && <th>Owner</th>}
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
@@ -619,15 +632,10 @@ export default function RawLeads() {
                               handleNoteChange(lead.id, e.target.value);
                             }
                           }}
-                          placeholder="Add note..."
-                          style={{ 
-                            fontSize: '0.75rem', 
-                            padding: '0.25rem 0.5rem', 
-                            borderRadius: '4px', 
-                            border: '1px solid var(--border-color)', 
-                            outline: 'none',
-                            width: '120px'
-                          }}
+                          style={{ width: '100%', minWidth: '120px', padding: '0.25rem 0.5rem', fontSize: '0.875rem', borderRadius: '4px', border: '1px solid transparent', background: 'transparent', outline: 'none' }}
+                          onFocus={(e) => { e.target.style.background = 'white'; e.target.style.borderColor = 'var(--border-color)'; }}
+                          onMouseOver={(e) => { if(document.activeElement !== e.target) e.target.style.borderColor = 'var(--border-color)'; }}
+                          onMouseOut={(e) => { if(document.activeElement !== e.target) e.target.style.borderColor = 'transparent'; }}
                         />
                       </td>
                       <td>
@@ -644,6 +652,13 @@ export default function RawLeads() {
                           {movingLeadId === lead.id && <Loader2 size={14} className="spin" color="var(--primary-main)" />}
                         </div>
                       </td>
+                      {isSuperAdmin && (
+                        <td>
+                          <span style={{ fontSize: '0.75rem', color: '#4f46e5', background: '#eef2ff', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                            @{lead.user?.username || 'admin'}
+                          </span>
+                        </td>
+                      )}
                       <td style={{ textAlign: 'right' }}>
                         <button onClick={() => handleEdit(lead)} style={{ background: 'none', border: 'none', color: 'var(--primary-main)', cursor: 'pointer', marginRight: '0.5rem' }}>
                           <Edit2 size={14} />
@@ -662,5 +677,6 @@ export default function RawLeads() {
 
       </div>
     </div>
+  </div>
   );
 }

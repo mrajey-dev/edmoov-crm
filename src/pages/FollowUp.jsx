@@ -20,6 +20,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { MoreHorizontal, Calendar, BookOpen, X, MessageSquare, Plus, Edit2, Trash2, Check, GraduationCap, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import StudentFormModal from '../components/StudentFormModal';
+import AdminFilterBar from '../components/AdminFilterBar';
 
 const API_URL = 'http://127.0.0.1:8000/api/leads';
 
@@ -86,6 +87,18 @@ function SortableItem({ item, onClick }) {
       <div className="lead-footer">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <img src={`https://i.pravatar.cc/150?u=${item.avatar}`} alt="Avatar" className="lead-avatar" />
+          {item.user && (
+            <span style={{
+              fontSize: '0.68rem',
+              color: '#4f46e5',
+              background: '#eef2ff',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              fontWeight: 600
+            }}>
+              @{item.user.username}
+            </span>
+          )}
         </div>
         <div className="lead-date" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
           <Calendar size={12} /> {item.date}
@@ -127,14 +140,18 @@ function KanbanColumn({ columnId, items, onCardClick }) {
 
 export default function FollowUp() {
   const [items, setItems] = useState([]);
-  
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const [selectedAdminId, setSelectedAdminId] = useState(null);
+
   useEffect(() => {
     fetchLeads();
-  }, []);
+  }, [selectedAdminId]);
 
   const fetchLeads = async () => {
     try {
-      const response = await axios.get(API_URL);
+      const url = selectedAdminId ? `${API_URL}?user_id=${selectedAdminId}` : API_URL;
+      const response = await axios.get(url);
       const fetchedItems = response.data.map(lead => ({
         ...lead,
         id: lead.id.toString(),
@@ -419,6 +436,12 @@ export default function FollowUp() {
 
   return (
     <div style={{ padding: '0 0' }}>
+      {isSuperAdmin && (
+        <AdminFilterBar
+          selectedAdminId={selectedAdminId}
+          onChange={setSelectedAdminId}
+        />
+      )}
       
       <DndContext
         sensors={sensors}
